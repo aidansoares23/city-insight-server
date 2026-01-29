@@ -21,18 +21,35 @@ const app = express();
 app.use(express.json());
 
 // CORS
-// TODO: Point to prod
-const clientOrigin = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+// Use comma-separated allowlist, e.g.
+// CLIENT_ORIGINS="http://localhost:5173,https://your-app.vercel.app"
+const allowlist = (process.env.CLIENT_ORIGINS || "http://localhost:5173")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: clientOrigin,
+    origin(origin, cb) {
+      // Allow non-browser clients (curl/postman) with no Origin header
+      if (!origin) return cb(null, true);
+
+      if (allowlist.includes(origin)) return cb(null, true);
+
+      return cb(new Error(`CORS blocked origin: ${origin}`));
+    },
     credentials: true,
   })
 );
 
-// Basic health check
+// Basic health check (cheap, no DB)
 app.get("/health", (req, res) => {
-  res.status(200).json({ ok: true });
+  res.status(200).json({
+    ok: true,
+    service: "city-insight-api",
+    ts: new Date().toISOString(),
+    env: process.env.NODE_ENV || "development",
+  });
 });
 
 /**
@@ -41,8 +58,8 @@ app.get("/health", (req, res) => {
  * --------------------------
  * All routes are mounted under /api
  */
-app.use("/api/cities", cityRoutes);     // cities + city details + city-scoped reviews (nested)
-app.use("/api/me", meRoutes);           // user dashboard endpoints
+app.use("/api/cities", cityRoutes); // cities + city details + city-scoped reviews (nested)
+app.use("/api/me", meRoutes); // user dashboard endpoints
 
 /**
  * --------------------------
