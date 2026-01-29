@@ -1,0 +1,14 @@
+POST http://localhost:3000/api/cities/san-francisco-ca/reviews
+Content-Type: application/json
+x-dev-user: seed-user-123
+
+{
+  "comment": "Loved the food and culture, but rent is brutal. Traffic is rough during rush hour.",
+  "ratings": {
+    "safety": 3,
+    "cost": 1,
+    "traffic": 2,
+    "cleanliness": 3,
+    "overall": 3
+  }
+}
