@@ -15,7 +15,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "firebase": "^12.8.0",
-    "firebase-admin": "^13.6.0",
+    "firebase-admin": "^12.7.0",
     "google-auth-library": "^10.5.0"
   },
   "devDependencies": {
