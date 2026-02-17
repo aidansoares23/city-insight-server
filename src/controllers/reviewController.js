@@ -10,7 +10,13 @@ const {
   computeLivabilityV0,
 } = require("../utils/cityStats");
 
-const REQUIRED_RATING_KEYS = ["safety", "cost", "traffic", "cleanliness", "overall"];
+const REQUIRED_RATING_KEYS = [
+  "safety",
+  "cost",
+  "traffic",
+  "cleanliness",
+  "overall",
+];
 const MAX_COMMENT_LEN = 800;
 
 // -----------------------------
@@ -49,9 +55,11 @@ function validateRatings(ratings) {
     }
 
     // Optional but recommended for consistency:
-    if (!Number.isInteger(val)) errors.push(`ratings.${key} must be an integer`);
+    if (!Number.isInteger(val))
+      errors.push(`ratings.${key} must be an integer`);
 
-    if (val < 1 || val > 10) errors.push(`ratings.${key} must be between 1 and 10`);
+    if (val < 1 || val > 10)
+      errors.push(`ratings.${key} must be between 1 and 10`);
   }
   return errors;
 }
@@ -83,7 +91,9 @@ function validateReviewBody(body) {
 function normalizeIncomingRatings(ratings) {
   const out = {};
   for (const k of REQUIRED_RATING_KEYS) {
-    out[k] = Number.isFinite(Number(ratings?.[k])) ? Math.round(Number(ratings[k])) : 0;
+    out[k] = Number.isFinite(Number(ratings?.[k]))
+      ? Math.round(Number(ratings[k]))
+      : 0;
   }
   return out;
 }
@@ -113,7 +123,9 @@ function assertSumsNonNegative({ cityId, sums, epsilon = 1e-6 }) {
   for (const k of REQUIRED_RATING_KEYS) {
     const v = Number(sums?.[k] ?? 0);
     if (Number.isFinite(v) && v < -epsilon) {
-      throw new Error(`city_stats sums went negative for ${cityId}.${k} (${v})`);
+      throw new Error(
+        `city_stats sums went negative for ${cityId}.${k} (${v})`,
+      );
     }
   }
 }
@@ -132,16 +144,21 @@ function normalizeMetricsForLivability(cityId, metricsDoc) {
   const m = isPlainObject(metricsDoc) ? metricsDoc : {};
 
   // Back-compat: support either medianRent or medianGrossRent.
-  const medianRent =
-    Number.isFinite(Number(m.medianRent)) ? Number(m.medianRent) :
-    Number.isFinite(Number(m.medianGrossRent)) ? Number(m.medianGrossRent) :
-    null;
+  const medianRent = Number.isFinite(Number(m.medianRent))
+    ? Number(m.medianRent)
+    : Number.isFinite(Number(m.medianGrossRent))
+      ? Number(m.medianGrossRent)
+      : null;
 
   return {
     cityId,
     medianRent,
-    population: Number.isFinite(Number(m.population)) ? Number(m.population) : null,
-    safetyScore: Number.isFinite(Number(m.safetyScore)) ? Number(m.safetyScore) : null, // 0–100 expected
+    population: Number.isFinite(Number(m.population))
+      ? Number(m.population)
+      : null,
+    safetyScore: Number.isFinite(Number(m.safetyScore))
+      ? Number(m.safetyScore)
+      : null, // 0–100 expected
   };
 }
 
@@ -151,7 +168,8 @@ function normalizeMetricsForLivability(cityId, metricsDoc) {
  */
 function toPublicReview(docId, data) {
   return withIsoTimestamps({
-    id: docId,
+    // TODO: MAKE SURE THIS IS OK
+    // id: docId,
     cityId: data.cityId,
     ratings: data.ratings,
     comment: data.comment ?? null,
@@ -186,7 +204,9 @@ function buildNextCursor(doc) {
 }
 
 function parseCursorFromQuery(req) {
-  const cursorId = req.query.cursorId ? String(req.query.cursorId).trim() : null;
+  const cursorId = req.query.cursorId
+    ? String(req.query.cursorId).trim()
+    : null;
   const cursorCreatedAtIso = req.query.cursorCreatedAtIso
     ? String(req.query.cursorCreatedAtIso).trim()
     : null;
@@ -194,7 +214,10 @@ function parseCursorFromQuery(req) {
   if (cursorId && cursorCreatedAtIso) {
     const dt = new Date(cursorCreatedAtIso);
     if (!Number.isNaN(dt.valueOf())) {
-      return { id: cursorId, createdAt: admin.firestore.Timestamp.fromDate(dt) };
+      return {
+        id: cursorId,
+        createdAt: admin.firestore.Timestamp.fromDate(dt),
+      };
     }
   }
 
@@ -230,7 +253,11 @@ async function createOrUpdateReviewForCity(req, res, next) {
     const { ok, errors } = validateReviewBody(req.body);
     if (!ok) {
       return res.status(400).json({
-        error: { code: "VALIDATION_ERROR", message: "Invalid review payload", details: { errors } },
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid review payload",
+          details: { errors },
+        },
       });
     }
 
@@ -258,13 +285,18 @@ async function createOrUpdateReviewForCity(req, res, next) {
       // Read existing review (if any)
       const reviewSnap = await tx.get(reviewRef);
       const isNew = !reviewSnap.exists;
-      const prevRatingsRaw = reviewSnap.exists ? (reviewSnap.data() || {}).ratings : null;
+      const prevRatingsRaw = reviewSnap.exists
+        ? (reviewSnap.data() || {}).ratings
+        : null;
       const prevRatings = normalizeRatings(prevRatingsRaw);
 
       // Read stats + metrics for consistent livability update
-      const [statsSnap, metricsSnap] = await Promise.all([tx.get(statsRef), tx.get(metricsRef)]);
+      const [statsSnap, metricsSnap] = await Promise.all([
+        tx.get(statsRef),
+        tx.get(metricsRef),
+      ]);
 
-      const prevStats = statsSnap.exists ? (statsSnap.data() || {}) : {};
+      const prevStats = statsSnap.exists ? statsSnap.data() || {} : {};
       const prevCount = Number(prevStats.count ?? 0);
       const prevSums = normalizeRatings(prevStats.sums);
 
@@ -282,7 +314,7 @@ async function createOrUpdateReviewForCity(req, res, next) {
 
       const { averages } = computeAveragesFromCountSums(nextCount, nextSums);
 
-      const metricsDoc = metricsSnap.exists ? (metricsSnap.data() || {}) : {};
+      const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
       const metrics = normalizeMetricsForLivability(cityId, metricsDoc);
       const livability = computeLivabilityV0({ averages, metrics });
 
@@ -321,7 +353,10 @@ async function createOrUpdateReviewForCity(req, res, next) {
   } catch (err) {
     if (err && err.status) {
       return res.status(err.status).json({
-        error: { code: err.code || "ERROR", message: err.message || "Request failed" },
+        error: {
+          code: err.code || "ERROR",
+          message: err.message || "Request failed",
+        },
       });
     }
     next(err);
@@ -336,7 +371,10 @@ async function listReviewsForCity(req, res, next) {
     const cityId = String(req.params.slug).trim().toLowerCase();
 
     const rawPageSize = parseInt(req.query.pageSize || "10", 10);
-    const pageSize = Math.max(1, Math.min(Number.isFinite(rawPageSize) ? rawPageSize : 10, 50));
+    const pageSize = Math.max(
+      1,
+      Math.min(Number.isFinite(rawPageSize) ? rawPageSize : 10, 50),
+    );
 
     let query = db
       .collection("reviews")
@@ -354,7 +392,10 @@ async function listReviewsForCity(req, res, next) {
 
     // Back-compat cursor: after=<docId>
     if (!cursor?.id && cursor?.afterIdOnly) {
-      const afterSnap = await db.collection("reviews").doc(cursor.afterIdOnly).get();
+      const afterSnap = await db
+        .collection("reviews")
+        .doc(cursor.afterIdOnly)
+        .get();
       if (afterSnap.exists) {
         const afterData = afterSnap.data() || {};
         if (afterData.cityId === cityId && afterData.createdAt) {
@@ -367,7 +408,9 @@ async function listReviewsForCity(req, res, next) {
     const docs = snap.docs;
 
     const reviews = docs.map((d) => toPublicReview(d.id, d.data()));
-    const nextCursor = docs.length ? buildNextCursor(docs[docs.length - 1]) : null;
+    const nextCursor = docs.length
+      ? buildNextCursor(docs[docs.length - 1])
+      : null;
 
     res.json({ reviews, pageSize, nextCursor });
   } catch (err) {
@@ -463,8 +506,11 @@ async function deleteMyReviewForCity(req, res, next) {
       const existing = reviewSnap.data() || {};
       const oldRatings = normalizeRatings(existing.ratings || {});
 
-      const [statsSnap, metricsSnap] = await Promise.all([tx.get(statsRef), tx.get(metricsRef)]);
-      const prevStats = statsSnap.exists ? (statsSnap.data() || {}) : {};
+      const [statsSnap, metricsSnap] = await Promise.all([
+        tx.get(statsRef),
+        tx.get(metricsRef),
+      ]);
+      const prevStats = statsSnap.exists ? statsSnap.data() || {} : {};
       const prevCount = Number(prevStats.count ?? 0);
       const prevSums = normalizeRatings(prevStats.sums);
 
@@ -479,7 +525,7 @@ async function deleteMyReviewForCity(req, res, next) {
 
       const { averages } = computeAveragesFromCountSums(nextCount, nextSums);
 
-      const metricsDoc = metricsSnap.exists ? (metricsSnap.data() || {}) : {};
+      const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
       const metrics = normalizeMetricsForLivability(cityId, metricsDoc);
       const livability = computeLivabilityV0({ averages, metrics });
 
@@ -501,7 +547,10 @@ async function deleteMyReviewForCity(req, res, next) {
   } catch (err) {
     if (err && err.status) {
       return res.status(err.status).json({
-        error: { code: err.code || "ERROR", message: err.message || "Request failed" },
+        error: {
+          code: err.code || "ERROR",
+          message: err.message || "Request failed",
+        },
       });
     }
     next(err);

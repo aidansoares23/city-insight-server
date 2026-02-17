@@ -1,48 +1,80 @@
 // src/app.js
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
+const helmet = require("helmet");
 
 // Route modules
 const cityRoutes = require("./routes/cityRoutes");
 const meRoutes = require("./routes/meRoutes");
+const authRoutes = require("./routes/authRoutes"); // NEW
 
-// Error handling middleware
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandlers");
 
 const app = express();
 
-/**
- * --------------------------
- * Global Middleware
- * --------------------------
- */
+app.set("trust proxy", 1); // IMPORTANT for Render/proxies + secure cookies
 
-// Parse JSON bodies
+app.use(helmet());
 app.use(express.json());
+app.use(cookieParser());
 
-// CORS
-// Use comma-separated allowlist, e.g.
-// CLIENT_ORIGINS="http://localhost:5173,https://your-app.vercel.app"
+// CORS allowlist
 const allowlist = (process.env.CLIENT_ORIGINS || "http://localhost:5173")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
+// app.use(
+//   cors({
+//     origin(origin, cb) {
+//       if (!origin) return cb(null, true);
+//       if (allowlist.includes(origin)) return cb(null, true);
+//       return cb(new Error(`CORS blocked origin: ${origin}`));
+//     },
+//     credentials: true, // REQUIRED for cookies
+//   }),
+// );
+// app.use(
+//   cors({
+//     origin(origin, cb) {
+//       if (!origin) return cb(null, true);
+//       if (allowlist.includes(origin)) return cb(null, true);
+//       return cb(null, false); // <- don't throw
+//     },
+//     credentials: true,
+//   }),
+// );
+
+// // If you want a consistent JSON error for disallowed origins:
+// app.use((err, req, res, next) => {
+//   if (err && String(err.message || "").startsWith("CORS")) {
+//     return res.status(403).json({
+//       error: { code: "CORS", message: "Origin not allowed" },
+//     });
+//   }
+//   next(err);
+// });
 app.use(
   cors({
     origin(origin, cb) {
-      // Allow non-browser clients (curl/postman) with no Origin header
-      if (!origin) return cb(null, true);
-
+      if (!origin) return cb(null, true); // curl / server-to-server
       if (allowlist.includes(origin)) return cb(null, true);
-
-      return cb(new Error(`CORS blocked origin: ${origin}`));
+      return cb(new Error("CORS_NOT_ALLOWED"));
     },
     credentials: true,
-  })
+  }),
 );
 
-// Basic health check (cheap, no DB)
+app.use((err, req, res, next) => {
+  if (err && err.message === "CORS_NOT_ALLOWED") {
+    return res.status(403).json({
+      error: { code: "CORS", message: "Origin not allowed" },
+    });
+  }
+  next(err);
+});
+
 app.get("/health", (req, res) => {
   res.status(200).json({
     ok: true,
@@ -52,20 +84,11 @@ app.get("/health", (req, res) => {
   });
 });
 
-/**
- * --------------------------
- * Routes
- * --------------------------
- * All routes are mounted under /api
- */
-app.use("/api/cities", cityRoutes); // cities + city details + city-scoped reviews (nested)
-app.use("/api/me", meRoutes); // user dashboard endpoints
+// Routes
+app.use("/api/auth", authRoutes); // NEW
+app.use("/api/cities", cityRoutes);
+app.use("/api/me", meRoutes);
 
-/**
- * --------------------------
- * Error Handling
- * --------------------------
- */
 app.use(notFoundHandler);
 app.use(errorHandler);
 

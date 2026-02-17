@@ -21,7 +21,9 @@ function withIsoTimestamps(obj) {
 }
 
 function normalizeCityIdFromParam(param) {
-  return String(param ?? "").trim().toLowerCase();
+  return String(param ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 function buildNextCursorFromDoc(doc) {
@@ -40,13 +42,21 @@ async function listCities(req, res, next) {
     const limit = Math.min(parseInt(req.query.limit || "50", 10), 100);
 
     // Optional: simple search filter (client-side; fine for <=100 cities)
-    const q = String(req.query.q || "").trim().toLowerCase();
+    const q = String(req.query.q || "")
+      .trim()
+      .toLowerCase();
 
     // Optional sorting
-    const sort = String(req.query.sort || "name_asc").trim().toLowerCase();
+    const sort = String(req.query.sort || "name_asc")
+      .trim()
+      .toLowerCase();
 
     // 1) Base city docs
-    const snap = await db.collection("cities").orderBy("name", "asc").limit(limit).get();
+    const snap = await db
+      .collection("cities")
+      .orderBy("name", "asc")
+      .limit(limit)
+      .get();
     const baseCities = snap.docs.map((d) => {
       const data = d.data() || {};
       return {
@@ -58,8 +68,12 @@ async function listCities(req, res, next) {
     });
 
     // 2) Batch fetch stats + metrics using getAll (performance)
-    const statsRefs = baseCities.map((c) => db.collection("city_stats").doc(c.id));
-    const metricsRefs = baseCities.map((c) => db.collection("city_metrics").doc(c.id));
+    const statsRefs = baseCities.map((c) =>
+      db.collection("city_stats").doc(c.id),
+    );
+    const metricsRefs = baseCities.map((c) =>
+      db.collection("city_metrics").doc(c.id),
+    );
 
     const [statsSnaps, metricsSnaps] = await Promise.all([
       statsRefs.length ? db.getAll(...statsRefs) : Promise.resolve([]),
@@ -68,8 +82,12 @@ async function listCities(req, res, next) {
 
     // 3) Build card projection
     let cities = baseCities.map((c, idx) => {
-      const statsDoc = statsSnaps[idx]?.exists ? (statsSnaps[idx].data() || {}) : {};
-      const metricsDoc = metricsSnaps[idx]?.exists ? (metricsSnaps[idx].data() || {}) : {};
+      const statsDoc = statsSnaps[idx]?.exists
+        ? statsSnaps[idx].data() || {}
+        : {};
+      const metricsDoc = metricsSnaps[idx]?.exists
+        ? metricsSnaps[idx].data() || {}
+        : {};
 
       const reviewCount = Number(statsDoc?.count ?? 0);
       const livabilityScore = statsDoc?.livability?.score ?? null;
@@ -95,7 +113,8 @@ async function listCities(req, res, next) {
     // 4) Optional search
     if (q) {
       cities = cities.filter((c) => {
-        const hay = `${c.name || ""} ${c.state || ""} ${c.slug || ""}`.toLowerCase();
+        const hay =
+          `${c.name || ""} ${c.state || ""} ${c.slug || ""}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -120,7 +139,9 @@ async function listCities(req, res, next) {
 
     switch (sort) {
       case "livability_desc":
-        cities.sort((a, b) => cmpNullLastDesc(a.livabilityScore, b.livabilityScore));
+        cities.sort((a, b) =>
+          cmpNullLastDesc(a.livabilityScore, b.livabilityScore),
+        );
         break;
       case "safety_desc":
         cities.sort((a, b) => cmpNullLastDesc(a.safetyScore, b.safetyScore));
@@ -136,7 +157,9 @@ async function listCities(req, res, next) {
         break;
       case "name_asc":
       default:
-        cities.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+        cities.sort((a, b) =>
+          String(a.name || "").localeCompare(String(b.name || "")),
+        );
         break;
     }
 
@@ -160,7 +183,9 @@ async function getCityBySlug(req, res, next) {
       });
     }
 
-    return res.json({ city: withIsoTimestamps({ id: snap.id, ...snap.data() }) });
+    return res.json({
+      city: withIsoTimestamps({ id: snap.id, ...snap.data() }),
+    });
   } catch (err) {
     next(err);
   }
@@ -218,7 +243,8 @@ async function getCityDetails(req, res, next) {
       const comment = typeof data.comment === "string" ? data.comment : "";
 
       return {
-        id: d.id,
+        // TODO: MAKE SURE THIS IS OK
+        // id: d.id,
         ratings: {
           overall: data?.ratings?.overall ?? null,
           safety: data?.ratings?.safety ?? null,
@@ -227,7 +253,8 @@ async function getCityDetails(req, res, next) {
           cleanliness: data?.ratings?.cleanliness ?? null,
         },
         commentPreview: comment
-          ? comment.slice(0, previewLen) + (comment.length > previewLen ? "…" : "")
+          ? comment.slice(0, previewLen) +
+            (comment.length > previewLen ? "…" : "")
           : null,
         createdAtIso: tsToIso(data.createdAt),
       };
