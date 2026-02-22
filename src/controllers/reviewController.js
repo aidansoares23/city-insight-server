@@ -169,7 +169,7 @@ function normalizeMetricsForLivability(cityId, metricsDoc) {
 function toPublicReview(docId, data) {
   return withIsoTimestamps({
     // TODO: MAKE SURE THIS IS OK
-    // id: docId,
+    id: docId,
     cityId: data.cityId,
     ratings: data.ratings,
     comment: data.comment ?? null,

@@ -264,14 +264,32 @@ async function getCityDetails(req, res, next) {
       ? buildNextCursorFromDoc(reviewsSnap.docs[reviewsSnap.docs.length - 1])
       : null;
 
+    // const cityData = citySnap.data() || {};
+    // const city = {
+    //   id: citySnap.id,
+    //   slug: cityData.slug,
+    //   name: cityData.name,
+    //   state: cityData.state,
+    //   lat: cityData.lat,
+    //   lng: cityData.lng,
+    // };
     const cityData = citySnap.data() || {};
     const city = {
       id: citySnap.id,
-      slug: cityData.slug,
-      name: cityData.name,
-      state: cityData.state,
-      lat: cityData.lat,
-      lng: cityData.lng,
+      slug: cityData.slug ?? citySnap.id,
+      name: cityData.name ?? null,
+      state: cityData.state ?? null,
+      lat: cityData.lat ?? null,
+      lng: cityData.lng ?? null,
+
+      // NEW: description fields for the details page
+      tagline: cityData.tagline ?? null,
+      description: cityData.description ?? null,
+      highlights: Array.isArray(cityData.highlights) ? cityData.highlights : [],
+
+      // Optional (nice for debugging / UI later)
+      createdAtIso: tsToIso(cityData.createdAt),
+      updatedAtIso: tsToIso(cityData.updatedAt),
     };
 
     return res.json({
