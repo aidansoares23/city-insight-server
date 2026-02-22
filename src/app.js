@@ -25,36 +25,6 @@ const allowlist = (process.env.CLIENT_ORIGINS || "http://localhost:5173")
   .map((s) => s.trim())
   .filter(Boolean);
 
-// app.use(
-//   cors({
-//     origin(origin, cb) {
-//       if (!origin) return cb(null, true);
-//       if (allowlist.includes(origin)) return cb(null, true);
-//       return cb(new Error(`CORS blocked origin: ${origin}`));
-//     },
-//     credentials: true, // REQUIRED for cookies
-//   }),
-// );
-// app.use(
-//   cors({
-//     origin(origin, cb) {
-//       if (!origin) return cb(null, true);
-//       if (allowlist.includes(origin)) return cb(null, true);
-//       return cb(null, false); // <- don't throw
-//     },
-//     credentials: true,
-//   }),
-// );
-
-// // If you want a consistent JSON error for disallowed origins:
-// app.use((err, req, res, next) => {
-//   if (err && String(err.message || "").startsWith("CORS")) {
-//     return res.status(403).json({
-//       error: { code: "CORS", message: "Origin not allowed" },
-//     });
-//   }
-//   next(err);
-// });
 app.use(
   cors({
     origin(origin, cb) {

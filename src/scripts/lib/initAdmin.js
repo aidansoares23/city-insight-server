@@ -16,7 +16,6 @@ function initAdmin() {
     ? serviceAccountPath
     : path.join(process.cwd(), serviceAccountPath);
 
-  // eslint-disable-next-line import/no-dynamic-require
   const serviceAccount = require(resolved);
 
   admin.initializeApp({
