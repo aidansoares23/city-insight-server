@@ -1,6 +1,8 @@
 // src/utils/cityStats.js
 const { db } = require("../config/firebase");
 const { updatedTimestamp } = require("./timestamps");
+const { clamp0to100, toNumOrNull } = require("../lib/numbers"); // (even if you only use clamp now)
+const { isPlainObject } = require("../lib/objects");
 
 /**
  * Review rating keys used throughout stats aggregation.
@@ -8,13 +10,9 @@ const { updatedTimestamp } = require("./timestamps");
  */
 const RATING_KEYS = ["safety", "cost", "traffic", "cleanliness", "overall"];
 
-/** -----------------------------
- * Small helpers
- * ----------------------------- */
-
-function isPlainObject(x) {
-  return x != null && typeof x === "object" && !Array.isArray(x);
-}
+// /** -----------------------------
+//  * Small helpers
+//  * ----------------------------- */
 
 /**
  * Convert to a finite number, otherwise fallback.
@@ -29,9 +27,9 @@ function clampNonNegative(n) {
   return n < 0 ? 0 : n;
 }
 
-function clamp0to100(n) {
-  return Math.max(0, Math.min(100, n));
-}
+// function clamp0to100(n) {
+//   return Math.max(0, Math.min(100, n));
+// }
 
 /**
  * For sums/deltas, missing or non-numeric values become 0.
@@ -40,7 +38,8 @@ function clamp0to100(n) {
 function normalizeRatings(ratings) {
   const src = isPlainObject(ratings) ? ratings : {};
   const out = {};
-  for (const k of RATING_KEYS) out[k] = Number.isFinite(Number(src[k])) ? Number(src[k]) : 0;
+  for (const k of RATING_KEYS)
+    out[k] = Number.isFinite(Number(src[k])) ? Number(src[k]) : 0;
   return out;
 }
 
@@ -93,7 +92,9 @@ function assertSumsNonNegative({ cityId, sums, epsilon = 1e-6 }) {
   for (const k of RATING_KEYS) {
     const v = toFiniteNumber(sums?.[k], 0);
     if (v < -epsilon) {
-      throw new Error(`city_stats sums went negative for ${cityId}.${k} (${v})`);
+      throw new Error(
+        `city_stats sums went negative for ${cityId}.${k} (${v})`,
+      );
     }
   }
 }
@@ -115,9 +116,19 @@ function computeLivabilityV0({ averages, metrics }) {
     ? clamp0to100(Math.round((overall10 / 10) * 100))
     : null;
 
-  // safetyScore expected 0–100 (objective metric)
-  const safetyScoreRaw = toFiniteNumber(metrics?.safetyScore, NaN);
-  const safetyScore100 = Number.isFinite(safetyScoreRaw) ? clamp0to100(Math.round(safetyScoreRaw)) : null;
+  // safetyScore expected 0–10 (objective metric)
+  // Back-compat: if stored as 0–100, convert.
+  const safetyRaw = toFiniteNumber(metrics?.safetyScore, NaN);
+
+  let safety10 = null;
+  if (Number.isFinite(safetyRaw)) {
+    safety10 = safetyRaw > 10 ? safetyRaw / 10 : safetyRaw;
+    safety10 = Math.max(0, Math.min(10, safety10));
+  }
+
+  // convert to 0–100 for blending with reviewOverall100
+  const safetyScore100 =
+    safety10 == null ? null : clamp0to100(Math.round(safety10 * 10));
 
   // Only blend what exists
   if (reviewOverall100 == null && safetyScore100 == null) {
@@ -145,9 +156,15 @@ function normalizeFlatCityMetrics(cityId, metricsDoc) {
   // safetyScore: Number(src.safetyScore) === 0 ? null : ...
   return {
     cityId,
-    medianRent: Number.isFinite(Number(src.medianRent)) ? Number(src.medianRent) : null,
-    population: Number.isFinite(Number(src.population)) ? Number(src.population) : null,
-    safetyScore: Number.isFinite(Number(src.safetyScore)) ? Number(src.safetyScore) : null,
+    medianRent: Number.isFinite(Number(src.medianRent))
+      ? Number(src.medianRent)
+      : null,
+    population: Number.isFinite(Number(src.population))
+      ? Number(src.population)
+      : null,
+    safetyScore: Number.isFinite(Number(src.safetyScore))
+      ? Number(src.safetyScore)
+      : null,
   };
 }
 
@@ -170,9 +187,12 @@ async function applyCityStatsDelta(cityId, { deltaCount, deltaRatings }) {
   const dr = normalizeRatings(deltaRatings);
 
   return db.runTransaction(async (tx) => {
-    const [statsSnap, metricsSnap] = await Promise.all([tx.get(statsRef), tx.get(metricsRef)]);
+    const [statsSnap, metricsSnap] = await Promise.all([
+      tx.get(statsRef),
+      tx.get(metricsRef),
+    ]);
 
-    const prev = statsSnap.exists ? (statsSnap.data() || {}) : {};
+    const prev = statsSnap.exists ? statsSnap.data() || {} : {};
     const prevCount = toFiniteNumber(prev?.count, 0);
     const prevSums = normalizeRatings(prev?.sums);
 
@@ -183,7 +203,7 @@ async function applyCityStatsDelta(cityId, { deltaCount, deltaRatings }) {
 
     const averages = computeAverages(nextCount, nextSums);
 
-    const metricsDoc = metricsSnap.exists ? (metricsSnap.data() || {}) : {};
+    const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
     const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
 
     const livability = computeLivabilityV0({ averages, metrics });
@@ -213,13 +233,16 @@ async function recomputeCityLivability(cityId) {
   const metricsRef = db.collection("city_metrics").doc(cityId);
 
   return db.runTransaction(async (tx) => {
-    const [statsSnap, metricsSnap] = await Promise.all([tx.get(statsRef), tx.get(metricsRef)]);
+    const [statsSnap, metricsSnap] = await Promise.all([
+      tx.get(statsRef),
+      tx.get(metricsRef),
+    ]);
 
-    const statsDoc = statsSnap.exists ? (statsSnap.data() || {}) : { cityId };
+    const statsDoc = statsSnap.exists ? statsSnap.data() || {} : { cityId };
     const { count, sums } = computeAveragesFromStats(statsDoc);
     const averages = computeAverages(count, sums);
 
-    const metricsDoc = metricsSnap.exists ? (metricsSnap.data() || {}) : {};
+    const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
     const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
 
     const livability = computeLivabilityV0({ averages, metrics });
@@ -240,7 +263,10 @@ async function recomputeCityLivability(cityId) {
  * Writes minimal city_stats, then recomputes livability.
  */
 async function recomputeCityStatsFromReviews(cityId) {
-  const snap = await db.collection("reviews").where("cityId", "==", cityId).get();
+  const snap = await db
+    .collection("reviews")
+    .where("cityId", "==", cityId)
+    .get();
 
   let count = 0;
   let sums = normalizeRatings({});
