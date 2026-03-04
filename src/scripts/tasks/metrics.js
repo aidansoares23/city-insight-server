@@ -1,21 +1,22 @@
 // src/scripts/tasks/metrics.js
-const fetch = require("node-fetch");
 const { upsertCityMetrics } = require("../../utils/cityMetrics");
 const { recomputeCityLivability } = require("../../utils/cityStats");
 const { db } = require("../../config/firebase");
 const { toNumOrNull } = require("../../lib/numbers");
 const { censusNameToSlug } = require("../../lib/slugs");
 
-console.log("[debug] metrics task loaded from:", __filename);
-
-const ACS_YEAR = "2022";
+const ACS_YEAR = "2023";
 const ACS_DATASET = `https://api.census.gov/data/${ACS_YEAR}/acs/acs5`;
 const ACS_VARS = ["B01003_001E", "B25064_001E", "NAME"];
 const ACS_GEO = "&for=place:*&in=state:06";
 
 async function fetchAcsPlacesCA() {
+  if (typeof globalThis.fetch !== "function") {
+    throw new Error("Global fetch is unavailable. Use Node.js 18+.");
+  }
+
   const url = `${ACS_DATASET}?get=${ACS_VARS.join(",")}${ACS_GEO}`;
-  const res = await fetch(url);
+  const res = await globalThis.fetch(url);
   if (!res.ok) throw new Error(`ACS API failed: ${res.status}`);
   const rows = await res.json();
 
@@ -58,7 +59,7 @@ async function taskMetrics({ cities, dryRun = false, verbose = false } = {}) {
   for (const cityId of cityIds) {
     const row = bySlug.get(cityId);
     if (!row) {
-      if (verbose) console.log(`[metrics] skip (not found in ACS): ${cityId}`);
+      console.log(`[metrics] skip (not found in ACS): ${cityId}`);
       continue;
     }
 
@@ -85,6 +86,7 @@ async function taskMetrics({ cities, dryRun = false, verbose = false } = {}) {
     if (verbose) console.log(`[metrics] updated ${cityId}`);
   }
 
+  console.log(`✅ metrics done. Updated ${touchedCityIds.length}/${cityIds.length} cities.`);
   return { touchedCityIds };
 }
 

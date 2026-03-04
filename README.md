@@ -1,296 +1,389 @@
-# City Insight Server
+# city-insight-server
 
-Node/Express API for **City Insight**.
+Backend API server for the City Insight application.
 
-Backed by **Firestore** (via Firebase Admin), with Google OAuth login
-that mints an **HTTP-only session cookie**.
+## Overview
 
-Provides endpoints for:
-
-- Listing cities + card-friendly metrics\
-- City details (stats + objective metrics + preview reviews)\
-- Reviews (create/update/delete "my review", list reviews with cursor
-  pagination)\
-- `/me` user profile + my reviews
-
----
+- Runtime: Node.js
+- Framework: Express 5
+- Data store: Firestore (via `firebase-admin`)
+- Auth: Google ID token verification + server-signed JWT session cookie
+- Deployment target: Render
+- Entry point: `src/index.js`
 
 ## Tech Stack
 
-- Node.js + Express\
-- Firestore (Firebase Admin SDK)\
-- Auth: Google ID token → server session JWT stored in `ci_session`
-  cookie\
-- Security:
-  - `helmet`
-  - CORS allowlist
-  - "CSRF-lite" header on state-changing requests
+- `express` (v5)
+- `firebase-admin` / `firebase`
+- `google-auth-library`
+- `jsonwebtoken`
+- `helmet`
+- `cors`
+- `cookie-parser`
+- `dotenv`
+- `commander` (admin CLI tasks)
 
----
+## Scripts
+
+From `package.json`:
+
+```bash
+npm run dev
+npm start
+npm test
+```
+
+- `npm run dev` -> `nodemon src/index.js`
+- `npm start` -> `node src/index.js`
+- `npm test` -> `node --test`
 
 ## Project Structure
 
-    src/
-      index.js               # Server entrypoint
-      app.js                 # Express app + middleware + routes
+```text
+src/
+  index.js                  # server entrypoint
+  app.js                    # express app, middleware, routes
 
-      config/
-        env.js               # Env parsing + safety checks
-        firebase.js          # Firebase Admin init + db export
+  config/
+    env.js                  # env parsing + safety checks
+    firebase.js             # firebase-admin init + firestore export
 
-      routes/
-        cityRoutes.js        # /api/cities/*
-        meRoutes.js          # /api/me/*
-        authRoutes.js        # /api/auth/*
+  routes/
+    authRoutes.js
+    cityRoutes.js
+    meRoutes.js
 
-      controllers/
-        cityController.js
-        reviewController.js
-        meController.js
+  controllers/
+    cityController.js
+    reviewController.js
+    meController.js
 
-      middleware/
-        requireAuth.js       # Cookie auth + CSRF-lite
-        errorHandlers.js
+  services/
+    cityService.js
+    reviewService.js
+    meService.js
+    metricsService.js       # currently empty
 
-      utils/
-        cityStats.js         # Aggregation + livability helpers
-        cityMetrics.js       # Safe upsert/read for objective metrics
-        timestamps.js
+  middleware/
+    requireAuth.js
+    errorHandlers.js
 
----
+  utils/
+    cityMetrics.js
+    cityStats.js
+    timestamps.js
 
-## Setup
+  lib/
+    firestore.js
+    reviews.js
+    slugs.js
+    meta.js
+    numbers.js
+    objects.js
+    errors.js
 
-### 1) Install
+  scripts/
+    ci.js                   # admin task CLI
+    devInit.js              # local seeding script
+    lib/initAdmin.js
+    tasks/
+      metrics.js
+      safety.js
+      stats.js
+      livability.js
+      cleanupMetrics.js
+      run.js
+
+  data/
+    *.csv                   # safety input data
+
+test/
+  app.smoke.test.js         # smoke tests
+```
+
+## Environment Variables
+
+Defined by current code paths:
+
+### Required for normal server operation
+
+```bash
+FIREBASE_SERVICE_ACCOUNT_PATH=./path/to/serviceAccountKey.json
+SESSION_JWT_SECRET=replace-me
+REVIEW_ID_SALT=replace-me
+GOOGLE_CLIENT_ID=your-google-client-id
+```
+
+### Optional / behavior control
+
+```bash
+NODE_ENV=development
+PORT=3000
+CLIENT_ORIGINS=http://localhost:5173
+DEV_AUTH_BYPASS=false
+```
+
+Notes:
+
+- `.env` is loaded via `dotenv` in `src/index.js`.
+- `FIREBASE_SERVICE_ACCOUNT_PATH` may be absolute or relative to repo root.
+- `DEV_AUTH_BYPASS=true` is blocked in production by `src/config/env.js`.
+
+## Local Development
+
+1. Install dependencies:
 
 ```bash
 npm install
 ```
 
-### 2) Create `.env`
-
-Create a `.env` file in the repo root.
-
-### Required Variables
-
-- `FIREBASE_SERVICE_ACCOUNT_PATH`\
-  Absolute or relative path to your Firebase service account JSON
-  (Admin SDK).
-
-- `GOOGLE_CLIENT_ID`\
-  Google OAuth Client ID used to verify ID tokens from the client.
-
-- `SESSION_JWT_SECRET`\
-  Secret used to sign the server session cookie JWT.
-
-- `REVIEW_ID_SALT`\
-  Salt for deterministic review document IDs (prevents guessing;
-  enforces 1 review per user per city).
-
-### Common / Recommended
-
-- `CLIENT_ORIGINS`\
-  Comma-separated allowlist for CORS.
-
-- `DEV_AUTH_BYPASS`\
-  `true` / `false` (dev only).
-
-- `NODE_ENV`\
-  `development` (default) or `production`
-
-- `PORT`\
-  Defaults to `3000`
-
-### Example `.env`
-
-    NODE_ENV=development
-    PORT=3000
-
-    CLIENT_ORIGINS=http://localhost:5173
-    GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
-
-    SESSION_JWT_SECRET=dev-secret-change-me
-    REVIEW_ID_SALT=dev-review-salt-change-me
-
-    FIREBASE_SERVICE_ACCOUNT_PATH=./secrets/serviceAccountKey.json
-
-    DEV_AUTH_BYPASS=true
-
----
-
-## Running the Server
-
-### Development
+2. Create `.env` with the variables above.
+3. Start dev server:
 
 ```bash
 npm run dev
 ```
 
-### Production
+Default local URL:
 
-```bash
-npm start
+```text
+http://localhost:3000
 ```
-
-Server runs at:
-
-    http://localhost:3000
 
 Health check:
 
-    GET /health
+```text
+GET /health
+```
 
----
+## Authentication Model
 
-# Authentication
+### Login flow
 
-## How It Works
+1. Client gets a Google ID token.
+2. Client calls `POST /api/auth/login` with `{ "idToken": "..." }`.
+3. Server verifies token with `google-auth-library`.
+4. Server sets `ci_session` cookie signed with `SESSION_JWT_SECRET`.
 
-1.  Client obtains a Google ID token.
-2.  Client calls `POST /api/auth/login` with `{ "idToken": "..." }`.
-3.  Server verifies the token.
-4.  Server sets a signed `ci_session` HTTP-only cookie.
-
-Cookie settings:
+Cookie behavior:
 
 - `httpOnly: true`
-- `secure: true` (production)
-- `sameSite: none` (production)
+- `path: /`
+- `maxAge: 7 days`
+- `secure: true` in production
+- `sameSite: "none"` in production, `"lax"` otherwise
 
----
+### Auth for protected routes
+
+- Middleware: `src/middleware/requireAuth.js`
+- Reads JWT from `ci_session` cookie
+- Sets `req.user` from JWT claims
+
+### Development auth bypass
+
+If `DEV_AUTH_BYPASS=true` and request is local-only:
+
+- authenticated identity comes from `x-dev-user` header
+- bypass is refused for non-local requests
 
 ## CSRF-lite Requirement
 
-State-changing requests must include:
+State-changing requests require this header:
 
-    x-requested-with: XMLHttpRequest
-
-Applies to POST, PUT, PATCH, DELETE, login, and logout routes.
-
----
-
-# API Overview
-
-Base URL: `/api`
-
-## Auth
-
-### Login
-
-    POST /api/auth/login
-
-Body:
-
-```json
-{ "idToken": "..." }
+```text
+x-requested-with: XMLHttpRequest
 ```
 
-### Logout
+Applied in auth and protected route middleware for `POST`, `PUT`, `PATCH`, `DELETE`.
 
-    POST /api/auth/logout
+## API Reference
 
----
+Base path: `/api`
 
-## Me
+### Health
 
-### Get Current User
+- `GET /health`
 
-    GET /api/me
+### Auth
 
-### Get My Reviews
+- `POST /api/auth/login`
+  - Body: `{ "idToken": "..." }`
+- `POST /api/auth/logout`
 
-    GET /api/me/reviews
+### Me
 
----
+- `GET /api/me` (auth required)
+- `GET /api/me/reviews` (auth required)
+  - Query:
+    - `limit` (max 100 in service code)
 
-## Cities
+### Cities
 
-### List Cities
+- `GET /api/cities`
+  - Query:
+    - `limit` (1..100, default 50)
+    - `q` (case-insensitive contains filter on name/state/slug)
+    - `sort`:
+      - `name_asc` (default)
+      - `livability_desc`
+      - `safety_desc`
+      - `rent_asc`
+      - `rent_desc`
+      - `reviews_desc`
+- `GET /api/cities/:slug`
+- `GET /api/cities/:slug/details`
 
-    GET /api/cities
+### City Reviews
 
-Query parameters:
+- `GET /api/cities/:slug/reviews`
+  - Query:
+    - `pageSize` (1..50, default 10)
+    - preferred cursor:
+      - `cursorId`
+      - `cursorCreatedAtIso`
+    - back-compat cursor:
+      - `after`
+- `GET /api/cities/:slug/reviews/:reviewId`
+- `GET /api/cities/:slug/reviews/me` (auth required)
+- `POST /api/cities/:slug/reviews` (auth required)
+- `DELETE /api/cities/:slug/reviews/me` (auth required)
 
-- `limit`
-- `q`
-- `sort`:
-  - `name_asc`
-  - `livability_desc`
-  - `safety_desc`
-  - `rent_asc`
-  - `rent_desc`
-  - `reviews_desc`
+Review payload validation (`POST /api/cities/:slug/reviews`):
 
-### Get City
+- `ratings` is required with integer keys `1..10`:
+  - `safety`
+  - `cost`
+  - `traffic`
+  - `cleanliness`
+  - `overall`
+- `comment` is optional, `string | null`, max length `800`
 
-    GET /api/cities/:slug
+## Firestore Collections (Current Code)
 
-### Get City Details
+- `cities`
+- `city_stats`
+- `city_metrics`
+- `reviews`
+- `users`
 
-    GET /api/cities/:slug/details
+## Admin / Data Tasks
 
----
+Task CLI entrypoint:
 
-# Reviews
-
-### List Reviews
-
-    GET /api/cities/:slug/reviews
-
-### Get Single Review
-
-    GET /api/cities/:slug/reviews/:reviewId
-
-### Get My Review
-
-    GET /api/cities/:slug/reviews/me
-
-### Create / Update Review
-
-    POST /api/cities/:slug/reviews
-
-Body:
-
-```json
-{
-  "comment": "optional string (<= 800 chars)",
-  "ratings": {
-    "safety": 1-10,
-    "cost": 1-10,
-    "traffic": 1-10,
-    "cleanliness": 1-10,
-    "overall": 1-10
-  }
-}
+```bash
+node src/scripts/ci.js --help
 ```
 
-### Delete Review
+Global CLI options:
 
-    DELETE /api/cities/:slug/reviews/me
+- `--dry-run`
+- `--verbose`
 
----
+### Add or update a city (recommended for onboarding)
 
-# Firestore Collections
+```bash
+node src/scripts/ci.js city-upsert \
+  --slug san-luis-obispo-ca \
+  --name "San Luis Obispo" \
+  --state CA \
+  --lat 35.2828 \
+  --lng -120.6596 \
+  --tagline "College town with coastal access" \
+  --description "Mid-size Central Coast city with strong outdoor access." \
+  --highlights "Downtown,Trails,Food"
+```
 
-- `cities/{cityId}`\
-- `city_metrics/{cityId}`\
-- `city_stats/{cityId}`\
-- `reviews/{reviewId}`\
-- `users/{sub}`
+Dry run:
 
----
+```bash
+node src/scripts/ci.js --dry-run city-upsert --slug san-luis-obispo-ca --name "San Luis Obispo" --state CA
+```
 
-# Deployment Notes
+### Metrics sync (ACS population/rent)
 
-In production:
+```bash
+node src/scripts/ci.js metrics
+node src/scripts/ci.js metrics --cities san-francisco-ca,san-jose-ca
+node src/scripts/ci.js --dry-run metrics
+```
 
-    NODE_ENV=production
-    CLIENT_ORIGINS=<your deployed frontend origins>
-    SESSION_JWT_SECRET=<strong secret>
-    REVIEW_ID_SALT=<strong secret>
+### Safety sync (CSV-driven)
 
----
+```bash
+node src/scripts/ci.js safety
+node src/scripts/ci.js safety --dir src/data
+node src/scripts/ci.js --dry-run safety
+```
 
-# License
+### Recompute stats from reviews
 
-ISC (per package.json).
+```bash
+node src/scripts/ci.js stats --all
+node src/scripts/ci.js stats --city san-francisco-ca
+node src/scripts/ci.js --dry-run stats --all
+```
+
+### Recompute livability from stats + metrics
+
+```bash
+node src/scripts/ci.js livability --all
+node src/scripts/ci.js livability --city san-francisco-ca
+```
+
+### Cleanup legacy city_metrics fields
+
+```bash
+node src/scripts/ci.js cleanup-metrics
+node src/scripts/ci.js cleanup-metrics --cities los-angeles-ca,san-diego-ca
+node src/scripts/ci.js --dry-run cleanup-metrics
+```
+
+### Run explicit pipeline
+
+```bash
+node src/scripts/ci.js run --steps metrics,safety,stats,livability --all
+```
+
+### Weekly refresh shortcut
+
+```bash
+node src/scripts/ci.js weekly-refresh
+```
+
+### Dev seed script
+
+Seed/reset only. This script is intended for local bootstrap and can reset/wipe data.
+
+```bash
+node src/scripts/devInit.js
+node src/scripts/devInit.js --skipMetrics
+node src/scripts/devInit.js --wipeSeededReviews
+node src/scripts/devInit.js --wipeAllReviews
+```
+
+## Testing
+
+Run tests:
+
+```bash
+npm test
+```
+
+Current suite (`test/app.smoke.test.js`) covers smoke-level API behavior with service mocks.
+
+## Production (Render)
+
+- Start command: `npm start`
+- Server binds `0.0.0.0` and `PORT` from environment.
+- Configure environment variables in Render dashboard.
+- In production, app sets `trust proxy` for secure cookie/proxy behavior.
+
+## Security Notes
+
+- `helmet` for standard security headers.
+- CORS allowlist via `CLIENT_ORIGINS`.
+- Cookie parsing via `cookie-parser`.
+- JWT session verification via `jsonwebtoken`.
+- Google ID token verification via `google-auth-library`.
+- Firestore access uses `firebase-admin` with service account credentials.
+- Centralized JSON error responses via `middleware/errorHandlers.js`.

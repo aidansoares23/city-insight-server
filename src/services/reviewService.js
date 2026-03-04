@@ -5,69 +5,14 @@ const {
   normalizeRatings,
   addRatings,
   subRatings,
+  assertSumsNonNegative,
+  computeAverages,
+  normalizeFlatCityMetrics,
   computeLivabilityV0,
 } = require("../utils/cityStats");
 
-const { REQUIRED_RATING_KEYS, makeReviewId } = require("../lib/reviews");
-const { isPlainObject } = require("../lib/objects");
-
-function assertSumsNonNegative({ cityId, sums, epsilon = 1e-6 }) {
-  for (const k of REQUIRED_RATING_KEYS) {
-    const v = Number(sums?.[k] ?? 0);
-    if (Number.isFinite(v) && v < -epsilon) {
-      throw new Error(
-        `city_stats sums went negative for ${cityId}.${k} (${v})`,
-      );
-    }
-  }
-}
-
-function computeAveragesFromCountSums(count, sums) {
-  const c = Number.isFinite(Number(count)) ? Number(count) : 0;
-  const s = normalizeRatings(sums);
-  const averages = {};
-  for (const k of REQUIRED_RATING_KEYS) {
-    averages[k] = c > 0 ? s[k] / c : null;
-  }
-  return { count: c, sums: s, averages };
-}
-
-function normalizeMetricsForLivability(cityId, metricsDoc) {
-  const m = isPlainObject(metricsDoc) ? metricsDoc : {};
-
-  // Back-compat: support either medianRent or medianGrossRent.
-  const medianRent = Number.isFinite(Number(m.medianRent))
-    ? Number(m.medianRent)
-    : Number.isFinite(Number(m.medianGrossRent))
-      ? Number(m.medianGrossRent)
-      : null;
-
-  const raw = Number.isFinite(Number(m.safetyScore))
-    ? Number(m.safetyScore)
-    : null;
-  const safetyScore =
-    raw == null ? null : Math.max(0, Math.min(10, raw > 10 ? raw / 10 : raw));
-
-  return {
-    cityId,
-    medianRent,
-    population: Number.isFinite(Number(m.population))
-      ? Number(m.population)
-      : null,
-    safetyScore,
-  };
-
-  // return {
-  //   cityId,
-  //   medianRent,
-  //   population: Number.isFinite(Number(m.population))
-  //     ? Number(m.population)
-  //     : null,
-  //   safetyScore: Number.isFinite(Number(m.safetyScore))
-  //     ? Number(m.safetyScore)
-  //     : null,
-  // };
-}
+const { makeReviewId } = require("../lib/reviews");
+const { AppError } = require("../lib/errors");
 
 /**
  * Transaction: create/update "my review" + update city_stats (count/sums/livability)
@@ -89,10 +34,7 @@ async function upsertMyReviewForCity({
   const txResult = await db.runTransaction(async (tx) => {
     const citySnap = await tx.get(cityRef);
     if (!citySnap.exists) {
-      const err = new Error("City not found");
-      err.status = 404;
-      err.code = "CITY_NOT_FOUND";
-      throw err;
+      throw new AppError("City not found", { status: 404, code: "CITY_NOT_FOUND" });
     }
 
     const reviewSnap = await tx.get(reviewRef);
@@ -121,10 +63,10 @@ async function upsertMyReviewForCity({
 
     assertSumsNonNegative({ cityId, sums: nextSums });
 
-    const { averages } = computeAveragesFromCountSums(nextCount, nextSums);
+    const averages = computeAverages(nextCount, nextSums);
 
     const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
-    const metrics = normalizeMetricsForLivability(cityId, metricsDoc);
+    const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
     const livability = computeLivabilityV0({ averages, metrics });
 
     const reviewPatch = {
@@ -175,18 +117,12 @@ async function deleteMyReviewForCity({ cityId, userId }) {
   await db.runTransaction(async (tx) => {
     const citySnap = await tx.get(cityRef);
     if (!citySnap.exists) {
-      const err = new Error("City not found");
-      err.status = 404;
-      err.code = "CITY_NOT_FOUND";
-      throw err;
+      throw new AppError("City not found", { status: 404, code: "CITY_NOT_FOUND" });
     }
 
     const reviewSnap = await tx.get(reviewRef);
     if (!reviewSnap.exists) {
-      const err = new Error("Review not found");
-      err.status = 404;
-      err.code = "NOT_FOUND";
-      throw err;
+      throw new AppError("Review not found", { status: 404, code: "NOT_FOUND" });
     }
 
     const existing = reviewSnap.data() || {};
@@ -206,10 +142,10 @@ async function deleteMyReviewForCity({ cityId, userId }) {
 
     assertSumsNonNegative({ cityId, sums: nextSums });
 
-    const { averages } = computeAveragesFromCountSums(nextCount, nextSums);
+    const averages = computeAverages(nextCount, nextSums);
 
     const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
-    const metrics = normalizeMetricsForLivability(cityId, metricsDoc);
+    const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
     const livability = computeLivabilityV0({ averages, metrics });
 
     tx.delete(reviewRef);
@@ -237,6 +173,10 @@ async function listReviewsForCity({ cityId, pageSize, cursor }) {
     .orderBy("createdAt", "desc")
     .orderBy(admin.firestore.FieldPath.documentId(), "desc")
     .limit(pageSize);
+
+  if (cursor?.id && !cursor?.createdAt) {
+    throw new AppError("Malformed cursor: id requires createdAt", { status: 400, code: "BAD_CURSOR" });
+  }
 
   // Preferred cursor: (createdAt, id)
   if (cursor?.id && cursor?.createdAt) {

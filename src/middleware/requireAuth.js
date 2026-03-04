@@ -7,6 +7,16 @@ function isLocalhostIp(ip) {
   return s === "127.0.0.1" || s === "::1" || s === "::ffff:127.0.0.1";
 }
 
+function isLocalDevRequest(req) {
+  const derivedIp = req.ip;
+  const socketIp = req.socket?.remoteAddress;
+  const hasForwardedFor = Boolean(req.headers["x-forwarded-for"]);
+
+  return (
+    isLocalhostIp(derivedIp) && isLocalhostIp(socketIp) && !hasForwardedFor
+  );
+}
+
 function isStateChangingMethod(req) {
   const m = String(req.method || "").toUpperCase();
   return m === "POST" || m === "PUT" || m === "PATCH" || m === "DELETE";
@@ -43,7 +53,7 @@ async function requireAuth(req, res, next) {
 
     // Dev bypass (localhost only)
     if (bypassEnabled) {
-      if (!isLocalhostIp(req.ip)) {
+      if (!isLocalDevRequest(req)) {
         return res.status(401).json({
           error: {
             code: "UNAUTHENTICATED",

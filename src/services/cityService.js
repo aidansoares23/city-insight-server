@@ -3,6 +3,8 @@ const { db, admin } = require("../config/firebase");
 const { computeAveragesFromStats } = require("../utils/cityStats");
 const { getCityMetrics } = require("../utils/cityMetrics");
 const { tsToIso, buildNextCursorFromDoc } = require("../lib/firestore");
+const { toNumOrNull } = require("../lib/numbers");
+const { AppError } = require("../lib/errors");
 
 function normalizeCityIdFromParam(param) {
   return String(param ?? "")
@@ -10,14 +12,9 @@ function normalizeCityIdFromParam(param) {
     .toLowerCase();
 }
 
-function toFiniteOrNull(x) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : null;
-}
-
 function cmpNullLastDesc(a, b) {
-  const av = toFiniteOrNull(a);
-  const bv = toFiniteOrNull(b);
+  const av = toNumOrNull(a);
+  const bv = toNumOrNull(b);
   if (av == null && bv == null) return 0;
   if (av == null) return 1;
   if (bv == null) return -1;
@@ -25,16 +22,19 @@ function cmpNullLastDesc(a, b) {
 }
 
 function cmpNullLastAsc(a, b) {
-  const av = toFiniteOrNull(a);
-  const bv = toFiniteOrNull(b);
+  const av = toNumOrNull(a);
+  const bv = toNumOrNull(b);
   if (av == null && bv == null) return 0;
   if (av == null) return 1;
   if (bv == null) return -1;
   return av - bv;
 }
 
-async function listCities({ limit = 50, q = "", sort = "name_asc" } = {}) {
-  const safeLimit = Math.min(Number(limit) || 50, 100);
+async function listCities({ limit, q, sort } = {}) {
+  const parsedLimit = Number.parseInt(String(limit ?? "50"), 10);
+  const safeLimit = Number.isFinite(parsedLimit)
+    ? Math.max(1, Math.min(parsedLimit, 100))
+    : 50;
   const queryQ = String(q || "")
     .trim()
     .toLowerCase();
@@ -46,7 +46,6 @@ async function listCities({ limit = 50, q = "", sort = "name_asc" } = {}) {
   const snap = await db
     .collection("cities")
     .orderBy("name", "asc")
-    .limit(safeLimit)
     .get();
 
   const baseCities = snap.docs.map((d) => {
@@ -84,9 +83,7 @@ async function listCities({ limit = 50, q = "", sort = "name_asc" } = {}) {
     const reviewCount = Number(statsDoc?.count ?? 0);
     const livabilityScore = statsDoc?.livability?.score ?? null;
 
-    // Back-compat: accept either medianRent or medianGrossRent
-    const medianRent =
-      metricsDoc?.medianRent ?? metricsDoc?.medianGrossRent ?? null;
+    const medianRent = metricsDoc?.medianRent ?? null;
 
     return {
       id: c.id,
@@ -138,6 +135,8 @@ async function listCities({ limit = 50, q = "", sort = "name_asc" } = {}) {
       break;
   }
 
+  cities = cities.slice(0, safeLimit);
+
   return {
     cities,
     meta: { limit: safeLimit, q: queryQ || null, sort: sortKey },
@@ -157,14 +156,23 @@ async function getCityDetails(slug) {
   // City
   const citySnap = await db.collection("cities").doc(cityId).get();
   if (!citySnap.exists) {
-    const err = new Error("City not found");
-    err.status = 404;
-    err.code = "NOT_FOUND";
-    throw err;
+    throw new AppError("City not found", { status: 404, code: "NOT_FOUND" });
   }
 
-  // stats
-  const statsSnap = await db.collection("city_stats").doc(cityId).get();
+  // Fetch stats, metrics, and reviews preview in parallel — all independent of each other.
+  const pageSize = 10;
+  const [statsSnap, metrics, reviewsSnap] = await Promise.all([
+    db.collection("city_stats").doc(cityId).get(),
+    getCityMetrics(cityId),
+    db
+      .collection("reviews")
+      .where("cityId", "==", cityId)
+      .orderBy("createdAt", "desc")
+      .orderBy(admin.firestore.FieldPath.documentId(), "desc")
+      .limit(pageSize)
+      .get(),
+  ]);
+
   const statsDoc = statsSnap.exists
     ? statsSnap.data() || {}
     : {
@@ -176,23 +184,10 @@ async function getCityDetails(slug) {
 
   const stats = computeAveragesFromStats(statsDoc);
 
-  // objective metrics (your util returns normalized)
-  const metrics = await getCityMetrics(cityId);
-
   const livability =
     statsDoc?.livability && typeof statsDoc.livability === "object"
       ? statsDoc.livability
       : { score: null, version: "uncomputed" };
-
-  // reviews preview
-  const pageSize = 10;
-  const reviewsSnap = await db
-    .collection("reviews")
-    .where("cityId", "==", cityId)
-    .orderBy("createdAt", "desc")
-    .orderBy(admin.firestore.FieldPath.documentId(), "desc")
-    .limit(pageSize)
-    .get();
 
   const previewLen = 160;
   const reviews = reviewsSnap.docs.map((d) => {
