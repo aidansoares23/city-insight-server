@@ -1,10 +1,5 @@
 const { db, admin } = require("../../config/firebase");
-
-function parseNumOrNull(value) {
-  if (value == null || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
+const { toOptionalNumOrNull } = require("../../lib/numbers");
 
 function parseHighlights(raw) {
   if (!raw) return [];
@@ -51,8 +46,8 @@ async function taskCityUpsert({
   const cityTagline = normalizeStringOrNull(tagline);
   const cityDescription = normalizeStringOrNull(description);
   const cityHighlights = parseHighlights(highlights);
-  const cityLat = parseNumOrNull(lat);
-  const cityLng = parseNumOrNull(lng);
+  const cityLat = toOptionalNumOrNull(lat);
+  const cityLng = toOptionalNumOrNull(lng);
 
   const errors = validateRequired({
     slug: cityId,

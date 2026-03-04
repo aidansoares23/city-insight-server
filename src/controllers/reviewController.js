@@ -73,14 +73,6 @@ async function createOrUpdateReviewForCity(req, res, next) {
       review: result.review ? toMyReview(result.reviewId, result.review) : null,
     });
   } catch (err) {
-    if (err && err.status) {
-      return res.status(err.status).json({
-        error: {
-          code: err.code || "ERROR",
-          message: err.message || "Request failed",
-        },
-      });
-    }
     next(err);
   }
 }
@@ -172,14 +164,6 @@ async function deleteMyReviewForCity(req, res, next) {
     await reviewService.deleteMyReviewForCity({ cityId, userId });
     return res.json({ ok: true, deleted: true });
   } catch (err) {
-    if (err && err.status) {
-      return res.status(err.status).json({
-        error: {
-          code: err.code || "ERROR",
-          message: err.message || "Request failed",
-        },
-      });
-    }
     next(err);
   }
 }

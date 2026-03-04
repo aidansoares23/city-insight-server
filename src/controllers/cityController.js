@@ -36,14 +36,6 @@ async function getCityDetails(req, res, next) {
     const result = await cityService.getCityDetails(req.params.slug);
     return res.json(result);
   } catch (err) {
-    if (err && err.status) {
-      return res.status(err.status).json({
-        error: {
-          code: err.code || "ERROR",
-          message: err.message || "Request failed",
-        },
-      });
-    }
     next(err);
   }
 }

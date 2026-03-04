@@ -173,8 +173,6 @@ async function recomputeCityStatsFromReviews(cityId) {
 }
 
 module.exports = {
-  RATING_KEYS,
-
   normalizeRatings,
   addRatings,
   subRatings,

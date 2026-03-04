@@ -3,6 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   toNumOrNull,
+  toOptionalNumOrNull,
   toFiniteNumber,
   clamp0to10,
   clamp0to100,
@@ -24,6 +25,21 @@ test("toNumOrNull: returns null for non-finite inputs", () => {
   assert.equal(toNumOrNull(Infinity), null);
   assert.equal(toNumOrNull(-Infinity), null);
   assert.equal(toNumOrNull("abc"), null);
+});
+
+// ─── toOptionalNumOrNull ─────────────────────────────────────────────────────
+
+test("toOptionalNumOrNull: returns null for nullish/blank inputs", () => {
+  assert.equal(toOptionalNumOrNull(null), null);
+  assert.equal(toOptionalNumOrNull(undefined), null);
+  assert.equal(toOptionalNumOrNull(""), null);
+  assert.equal(toOptionalNumOrNull("   "), null);
+});
+
+test("toOptionalNumOrNull: returns numeric value for valid inputs", () => {
+  assert.equal(toOptionalNumOrNull("42"), 42);
+  assert.equal(toOptionalNumOrNull(0), 0);
+  assert.equal(toOptionalNumOrNull("-7.5"), -7.5);
 });
 
 // ─── toFiniteNumber ───────────────────────────────────────────────────────────

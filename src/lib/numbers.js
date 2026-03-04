@@ -5,6 +5,12 @@ function toNumOrNull(x) {
   return Number.isFinite(n) ? n : null;
 }
 
+function toOptionalNumOrNull(x) {
+  if (x == null) return null;
+  if (typeof x === "string" && x.trim() === "") return null;
+  return toNumOrNull(x);
+}
+
 function toFiniteNumber(x, fallback = NaN) {
   const n = Number(x);
   return Number.isFinite(n) ? n : fallback;
@@ -30,4 +36,11 @@ function normalizeSafetyTo10(x) {
   return clamp0to10(Math.round(s * 10) / 10);
 }
 
-module.exports = { toNumOrNull, toFiniteNumber, clamp0to10, clamp0to100, normalizeSafetyTo10 };
+module.exports = {
+  toNumOrNull,
+  toOptionalNumOrNull,
+  toFiniteNumber,
+  clamp0to10,
+  clamp0to100,
+  normalizeSafetyTo10,
+};
