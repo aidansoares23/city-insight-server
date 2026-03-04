@@ -11,6 +11,9 @@ const STEP_MAP = {
   livability: taskLivability,
 };
 
+// Steps that require --all or --city to be meaningful.
+const STEPS_REQUIRING_SCOPE = new Set(["stats", "livability"]);
+
 async function taskRun(opts = {}) {
   const { steps } = opts;
   if (!steps || steps.length === 0) throw new Error("run requires --steps");
@@ -21,6 +24,12 @@ async function taskRun(opts = {}) {
       throw new Error(
         `unknown step "${step}". allowed: ${Object.keys(STEP_MAP).join(", ")}`,
       );
+
+    if (STEPS_REQUIRING_SCOPE.has(step) && !opts.all && !opts.city) {
+      throw new Error(
+        `step "${step}" requires --all or --city <slug>`,
+      );
+    }
 
     console.log(`\n=== step: ${step} ===`);
     await fn(opts); // pass through options

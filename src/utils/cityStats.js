@@ -1,40 +1,14 @@
-// src/utils/cityStats.js
 const { db } = require("../config/firebase");
 const { updatedTimestamp } = require("./timestamps");
-const { clamp0to100, toNumOrNull } = require("../lib/numbers"); // (even if you only use clamp now)
+const { toFiniteNumber, clamp0to100, normalizeSafetyTo10 } = require("../lib/numbers");
 const { isPlainObject } = require("../lib/objects");
-
-/**
- * Review rating keys used throughout stats aggregation.
- * Keep in sync with review validation.
- */
-const RATING_KEYS = ["safety", "cost", "traffic", "cleanliness", "overall"];
-
-// /** -----------------------------
-//  * Small helpers
-//  * ----------------------------- */
-
-/**
- * Convert to a finite number, otherwise fallback.
- * Default fallback is NaN to avoid silently treating missing as 0.
- */
-function toFiniteNumber(x, fallback = NaN) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : fallback;
-}
+const { REQUIRED_RATING_KEYS: RATING_KEYS } = require("../lib/reviews");
 
 function clampNonNegative(n) {
   return n < 0 ? 0 : n;
 }
 
-// function clamp0to100(n) {
-//   return Math.max(0, Math.min(100, n));
-// }
-
-/**
- * For sums/deltas, missing or non-numeric values become 0.
- * This is correct for aggregation math (controller validation enforces bounds).
- */
+// Missing or non-numeric values become 0 — correct for aggregation math.
 function normalizeRatings(ratings) {
   const src = isPlainObject(ratings) ? ratings : {};
   const out = {};
@@ -59,132 +33,84 @@ function subRatings(a, b) {
   return out;
 }
 
-/**
- * Compute averages from count+sums. Null if count === 0.
- * NOTE: We do NOT store averages in Firestore anymore.
- */
 function computeAverages(count, sums) {
   const c = toFiniteNumber(count, 0);
   const s = normalizeRatings(sums);
-
   const averages = {};
-  for (const k of RATING_KEYS) {
-    averages[k] = c > 0 ? s[k] / c : null;
-  }
+  for (const k of RATING_KEYS) averages[k] = c > 0 ? s[k] / c : null;
   return averages;
 }
 
-/**
- * Back-compat helper: given a stats doc (or partial), compute count/sums/averages.
- */
 function computeAveragesFromStats(statsDoc) {
   const count = toFiniteNumber(statsDoc?.count, 0);
   const sums = normalizeRatings(statsDoc?.sums);
-  const averages = computeAverages(count, sums);
-  return { count, sums, averages };
+  return { count, sums, averages: computeAverages(count, sums) };
 }
 
-/**
- * Guard to catch silent aggregate corruption early.
- * We do NOT clamp sums, because clamping hides bugs (double-deletes, wrong deltas).
- */
+// Throws rather than clamping so aggregate bugs surface immediately.
 function assertSumsNonNegative({ cityId, sums, epsilon = 1e-6 }) {
   for (const k of RATING_KEYS) {
     const v = toFiniteNumber(sums?.[k], 0);
-    if (v < -epsilon) {
-      throw new Error(
-        `city_stats sums went negative for ${cityId}.${k} (${v})`,
-      );
-    }
+    if (v < -epsilon)
+      throw new Error(`city_stats sums went negative for ${cityId}.${k} (${v})`);
   }
 }
 
-/** -----------------------------
- * Livability (v0 placeholder)
- * ----------------------------- */
-
-/**
- * v0: blend of review overall (1–10 => 0–100) and objective safetyScore (0–100).
- * Key rule: missing metrics must be treated as missing (null), NOT 0.
+/*
+ * Weighted blend of up to three signals. Missing signals are dropped and
+ * remaining weights renormalized rather than treated as zero.
  *
- * Returns MINIMAL shape only: { version, score }
+ *   50%  review overall      (1–10 → 0–100)
+ *   35%  safety score        (0–10 → 0–100)
+ *   15%  rent affordability  (medianRent vs $3500 ceiling → 0–100)
  */
 function computeLivabilityV0({ averages, metrics }) {
-  // reviews overall (1–10) -> 0–100
   const overall10 = toFiniteNumber(averages?.overall, NaN);
-  const reviewOverall100 = Number.isFinite(overall10)
+  const reviewScore = Number.isFinite(overall10)
     ? clamp0to100(Math.round((overall10 / 10) * 100))
     : null;
 
-  // safetyScore expected 0–10 (objective metric)
-  // Back-compat: if stored as 0–100, convert.
   const safetyRaw = toFiniteNumber(metrics?.safetyScore, NaN);
+  const safetyScore = Number.isFinite(safetyRaw)
+    ? clamp0to100(Math.round(safetyRaw * 10))
+    : null;
 
-  let safety10 = null;
-  if (Number.isFinite(safetyRaw)) {
-    safety10 = safetyRaw > 10 ? safetyRaw / 10 : safetyRaw;
-    safety10 = Math.max(0, Math.min(10, safety10));
-  }
+  const RENT_MAX = 3500;
+  const rentRaw = toFiniteNumber(metrics?.medianRent, NaN);
+  const rentScore =
+    Number.isFinite(rentRaw) && rentRaw > 0
+      ? clamp0to100(Math.round((1 - rentRaw / RENT_MAX) * 100))
+      : null;
 
-  // convert to 0–100 for blending with reviewOverall100
-  const safetyScore100 =
-    safety10 == null ? null : clamp0to100(Math.round(safety10 * 10));
+  const signals = [
+    { score: reviewScore, weight: 0.5  },
+    { score: safetyScore, weight: 0.35 },
+    { score: rentScore,   weight: 0.15 },
+  ].filter((s) => s.score != null);
 
-  // Only blend what exists
-  if (reviewOverall100 == null && safetyScore100 == null) {
-    return { version: "v0", score: null };
-  }
+  if (signals.length === 0) return { version: "v0", score: null };
 
-  let score;
-  if (reviewOverall100 != null && safetyScore100 != null) {
-    score = Math.round(0.55 * reviewOverall100 + 0.45 * safetyScore100);
-  } else {
-    score = reviewOverall100 ?? safetyScore100;
-  }
+  const totalWeight = signals.reduce((sum, s) => sum + s.weight, 0);
+  const score = Math.round(
+    signals.reduce((sum, s) => sum + s.score * (s.weight / totalWeight), 0),
+  );
 
   return { version: "v0", score };
 }
 
-/**
- * Read and normalize flat city_metrics doc into the fields we care about.
- * (Matches your current Firestore shape from the screenshot.)
- */
 function normalizeFlatCityMetrics(cityId, metricsDoc) {
   const src = isPlainObject(metricsDoc) ? metricsDoc : {};
-
-  // If you ever decide "0 means unknown", change this to:
-  // safetyScore: Number(src.safetyScore) === 0 ? null : ...
   return {
     cityId,
-    medianRent: Number.isFinite(Number(src.medianRent))
-      ? Number(src.medianRent)
-      : null,
-    population: Number.isFinite(Number(src.population))
-      ? Number(src.population)
-      : null,
-    safetyScore: Number.isFinite(Number(src.safetyScore))
-      ? Number(src.safetyScore)
-      : null,
+    medianRent:  Number.isFinite(Number(src.medianRent))  ? Number(src.medianRent)  : null,
+    population:  Number.isFinite(Number(src.population))  ? Number(src.population)  : null,
+    safetyScore: normalizeSafetyTo10(src.safetyScore),
   };
 }
 
-/** -----------------------------
- * Firestore ops
- * ----------------------------- */
-
-/**
- * Transactionally apply a delta to city stats (REVIEW AGGREGATES ONLY),
- * AND recompute livability inside the same transaction for a consistent snapshot.
- *
- * Stored doc stays minimal:
- * { cityId, count, sums, livability, updatedAt }
- */
 async function applyCityStatsDelta(cityId, { deltaCount, deltaRatings }) {
   const statsRef = db.collection("city_stats").doc(cityId);
   const metricsRef = db.collection("city_metrics").doc(cityId);
-
-  const dc = toFiniteNumber(deltaCount, 0);
-  const dr = normalizeRatings(deltaRatings);
 
   return db.runTransaction(async (tx) => {
     const [statsSnap, metricsSnap] = await Promise.all([
@@ -193,41 +119,21 @@ async function applyCityStatsDelta(cityId, { deltaCount, deltaRatings }) {
     ]);
 
     const prev = statsSnap.exists ? statsSnap.data() || {} : {};
-    const prevCount = toFiniteNumber(prev?.count, 0);
-    const prevSums = normalizeRatings(prev?.sums);
-
-    const nextCount = clampNonNegative(prevCount + dc);
-    const nextSums = addRatings(prevSums, dr);
+    const nextCount = clampNonNegative(toFiniteNumber(prev.count, 0) + toFiniteNumber(deltaCount, 0));
+    const nextSums = addRatings(normalizeRatings(prev.sums), normalizeRatings(deltaRatings));
 
     assertSumsNonNegative({ cityId, sums: nextSums });
 
     const averages = computeAverages(nextCount, nextSums);
-
-    const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
-    const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
-
+    const metrics = normalizeFlatCityMetrics(cityId, metricsSnap.exists ? metricsSnap.data() || {} : {});
     const livability = computeLivabilityV0({ averages, metrics });
 
-    const patch = {
-      cityId,
-      count: nextCount,
-      sums: nextSums,
-      livability,
-      ...updatedTimestamp(),
-    };
-
+    const patch = { cityId, count: nextCount, sums: nextSums, livability, ...updatedTimestamp() };
     tx.set(statsRef, patch, { merge: true });
-
     return { stats: patch, livability };
   });
 }
 
-/**
- * Recompute livability from stored review aggregates + current flat city_metrics.
- * Use this when metrics change (scripts/services) OR if you want to “repair” livability.
- *
- * Writes MINIMAL livability shape: { version, score } under city_stats/{cityId}.livability
- */
 async function recomputeCityLivability(cityId) {
   const statsRef = db.collection("city_stats").doc(cityId);
   const metricsRef = db.collection("city_metrics").doc(cityId);
@@ -238,58 +144,31 @@ async function recomputeCityLivability(cityId) {
       tx.get(metricsRef),
     ]);
 
-    const statsDoc = statsSnap.exists ? statsSnap.data() || {} : { cityId };
-    const { count, sums } = computeAveragesFromStats(statsDoc);
+    const { count, sums } = computeAveragesFromStats(statsSnap.exists ? statsSnap.data() || {} : {});
     const averages = computeAverages(count, sums);
-
-    const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
-    const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
-
+    const metrics = normalizeFlatCityMetrics(cityId, metricsSnap.exists ? metricsSnap.data() || {} : {});
     const livability = computeLivabilityV0({ averages, metrics });
 
-    const patch = {
-      cityId,
-      livability,
-      ...updatedTimestamp(),
-    };
-
-    tx.set(statsRef, patch, { merge: true });
+    tx.set(statsRef, { cityId, livability, ...updatedTimestamp() }, { merge: true });
     return livability;
   });
 }
 
-/**
- * Recompute count+sums from the source of truth: reviews collection.
- * Writes minimal city_stats, then recomputes livability.
- */
 async function recomputeCityStatsFromReviews(cityId) {
-  const snap = await db
-    .collection("reviews")
-    .where("cityId", "==", cityId)
-    .get();
+  const snap = await db.collection("reviews").where("cityId", "==", cityId).get();
 
   let count = 0;
   let sums = normalizeRatings({});
-
   for (const doc of snap.docs) {
-    const r = doc.data();
-    sums = addRatings(sums, normalizeRatings(r?.ratings));
+    sums = addRatings(sums, normalizeRatings(doc.data()?.ratings));
     count += 1;
   }
 
   assertSumsNonNegative({ cityId, sums });
 
-  const statsDoc = {
-    cityId,
-    count,
-    sums,
-    ...updatedTimestamp(),
-  };
-
+  const statsDoc = { cityId, count, sums, ...updatedTimestamp() };
   await db.collection("city_stats").doc(cityId).set(statsDoc, { merge: true });
-
   await recomputeCityLivability(cityId);
-
   return statsDoc;
 }
 
@@ -300,7 +179,10 @@ module.exports = {
   addRatings,
   subRatings,
 
+  assertSumsNonNegative,
+  computeAverages,
   computeAveragesFromStats,
+  normalizeFlatCityMetrics,
 
   computeLivabilityV0,
   recomputeCityLivability,

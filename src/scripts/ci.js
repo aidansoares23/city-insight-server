@@ -8,10 +8,8 @@ const { taskMetrics } = require("./tasks/metrics");
 const { taskSafety } = require("./tasks/safety");
 const { taskStats } = require("./tasks/stats");
 const { taskLivability } = require("./tasks/livability");
+const { taskCityUpsert } = require("./tasks/cities");
 const { taskRun } = require("./tasks/run");
-
-console.log("[debug] ci.js path:", __filename);
-console.log("[debug] metrics resolves to:", require.resolve("./tasks/metrics"));
 
 function parseCities(val) {
   if (!val) return null;
@@ -69,16 +67,17 @@ program
   .description("Recompute city_stats from reviews (source of truth)")
   .option("--all", "recompute for all cities", false)
   .option("--city <slug>", "single city id")
-  .action((opts, cmd) =>
-    withAdmin(() =>
+  .action(async (opts, cmd) => {
+    const result = await withAdmin(() =>
       taskStats({
         all: !!opts.all,
         city: opts.city ? String(opts.city).trim().toLowerCase() : null,
         dryRun: cmd.parent.opts().dryRun,
         verbose: cmd.parent.opts().verbose,
       }),
-    ),
-  );
+    );
+    if (result?.fail) process.exitCode = 1;
+  });
 
 program
   .command("livability")
@@ -92,6 +91,36 @@ program
         city: opts.city ? String(opts.city).trim().toLowerCase() : null,
         dryRun: cmd.parent.opts().dryRun,
         verbose: cmd.parent.opts().verbose,
+      }),
+    ),
+  );
+
+program
+  .command("city-upsert")
+  .description("Create or update a single city doc (non-destructive)")
+  .requiredOption("--slug <slug>", "city slug/doc id, e.g. san-luis-obispo-ca")
+  .requiredOption("--name <name>", "display name, e.g. San Luis Obispo")
+  .requiredOption("--state <state>", "2-letter state, e.g. CA")
+  .option("--lat <lat>", "latitude")
+  .option("--lng <lng>", "longitude")
+  .option("--tagline <tagline>", "short city tagline")
+  .option("--description <description>", "long city description")
+  .option(
+    "--highlights <items>",
+    "comma-separated highlights, e.g. Beaches,Walkability,Weather",
+  )
+  .action((opts, cmd) =>
+    withAdmin(() =>
+      taskCityUpsert({
+        slug: opts.slug,
+        name: opts.name,
+        state: opts.state,
+        lat: opts.lat,
+        lng: opts.lng,
+        tagline: opts.tagline,
+        description: opts.description,
+        highlights: opts.highlights,
+        dryRun: cmd.parent.opts().dryRun,
       }),
     ),
   );
@@ -133,7 +162,6 @@ program
     "Run the standard weekly pipeline: metrics -> safety -> stats -> livability",
   )
   .option("--dir <path>", "CSV dir (for safety)", null)
-  .option("--all", "all cities (default true)", true)
   .action((opts, cmd) =>
     withAdmin(() =>
       taskRun({

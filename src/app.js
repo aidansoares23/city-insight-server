@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
+const { NODE_ENV } = require("./config/env");
 
 // Route modules
 const cityRoutes = require("./routes/cityRoutes");
@@ -13,7 +14,10 @@ const { notFoundHandler, errorHandler } = require("./middleware/errorHandlers");
 
 const app = express();
 
-app.set("trust proxy", 1); // IMPORTANT for Render/proxies + secure cookies
+if (NODE_ENV === "production") {
+  // Only trust proxy headers in environments where a trusted proxy is expected.
+  app.set("trust proxy", 1);
+}
 
 app.use(helmet());
 app.use(express.json());

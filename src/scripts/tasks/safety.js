@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { db } = require("../../config/firebase");
+const { clamp0to10 } = require("../../lib/numbers");
 const { upsertCityMetrics } = require("../../utils/cityMetrics");
 const { recomputeCityLivability } = require("../../utils/cityStats");
 
@@ -12,8 +13,12 @@ const { recomputeCityLivability } = require("../../utils/cityStats");
 const YEARS_TO_AVG = 3;
 const WEIGHT_VIOLENT = 3;
 const WEIGHT_PROPERTY = 1;
-const RATE_AT_ZERO = 8000;
-const SAFETY_PIPELINE_VERSION = "syncSafetyFromCsv:v1";
+// RATE_AT_ZERO: the weighted-average crime index (per 100k) at which safetyScore = 0.
+// Calibrated for the weighted-average formula below (not weighted sum).
+// US national violent ~380/100k, property ~2000/100k → weighted avg ≈ 785/100k → score ~6.9.
+// High-crime CA city (e.g. violent 750, property 2500 per 100k) → weighted avg ≈ 1188 → score ~5.3.
+const RATE_AT_ZERO = 2500;
+const SAFETY_PIPELINE_VERSION = "syncSafetyFromCsv:v2";
 
 // -----------------------------
 // Path resolution (task-friendly)
@@ -42,10 +47,6 @@ function parseCount(cell) {
   return Number.isFinite(n) ? n : null;
 }
 
-function clamp0to10(n) {
-  return Math.max(0, Math.min(10, n));
-}
-
 /**
  * Convert crimeIndexPer100k -> safety score (0–10).
  * RATE_AT_ZERO is the "very unsafe" threshold (score ~ 0).
@@ -60,12 +61,6 @@ function computeSafetyScoreFromIndex(crimeIndexPer100k) {
   // return Math.round(clamp0to10(raw10));             // integer 0–10
   return Math.round(clamp0to10(raw10) * 10) / 10; // 1 decimal (recommended)
 }
-
-// function computeSafetyScoreFromIndex(crimeIndexPer100k) {
-//   if (!Number.isFinite(crimeIndexPer100k)) return null;
-//   const raw = 100 - (crimeIndexPer100k / RATE_AT_ZERO) * 100;
-//   return Math.round(clamp0to100(raw));
-// }
 
 function readCrimeRowsFromCsv(csvText) {
   const lines = csvText
@@ -148,6 +143,14 @@ async function taskSafety({ dir, dryRun = false, verbose = false } = {}) {
     }
 
     const { years, rows } = parsed;
+
+    if (rows.size === 0) {
+      console.warn(
+        `[warn] ${cityId}: CSV parsed 0 rows — file may use unquoted fields or an unexpected format (${file})`,
+      );
+      continue;
+    }
+
     const violentCells = rows.get("Violent Crimes");
     const propertyCells = rows.get("Property Crimes");
 
@@ -176,8 +179,11 @@ async function taskSafety({ dir, dryRun = false, verbose = false } = {}) {
       continue;
     }
 
+    // Weighted average (not sum): divide by total weight so the index represents
+    // a per-crime-type rate rather than an inflated combined count.
     const weightedAvg =
-      violent.avg * WEIGHT_VIOLENT + property.avg * WEIGHT_PROPERTY;
+      (violent.avg * WEIGHT_VIOLENT + property.avg * WEIGHT_PROPERTY) /
+      (WEIGHT_VIOLENT + WEIGHT_PROPERTY);
     const crimeIndexPer100k = (weightedAvg / population) * 100000;
     const safetyScore = computeSafetyScoreFromIndex(crimeIndexPer100k);
 
@@ -223,4 +229,4 @@ async function taskSafety({ dir, dryRun = false, verbose = false } = {}) {
   return { touchedCityIds };
 }
 
-module.exports = { taskSafety };
+module.exports = { taskSafety, computeSafetyScoreFromIndex, readCrimeRowsFromCsv, avgLastNYears };

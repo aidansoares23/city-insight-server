@@ -29,7 +29,6 @@ async function taskStats({ all = false, city = null, dryRun = false } = {}) {
     }
   }
 
-  if (fail) process.exitCode = 1;
   return { touchedCityIds: cityIds, ok, fail };
 }
 

@@ -4,15 +4,11 @@ const cityService = require("../services/cityService");
 
 async function listCities(req, res, next) {
   try {
-    const limit = Math.min(parseInt(req.query.limit || "50", 10), 100);
-    const q = String(req.query.q || "")
-      .trim()
-      .toLowerCase();
-    const sort = String(req.query.sort || "name_asc")
-      .trim()
-      .toLowerCase();
-
-    const result = await cityService.listCities({ limit, q, sort });
+    const result = await cityService.listCities({
+      limit: req.query.limit,
+      q: req.query.q,
+      sort: req.query.sort,
+    });
     return res.json(result);
   } catch (err) {
     next(err);
