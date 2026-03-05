@@ -208,7 +208,7 @@ async function getCityDetails(slug) {
         ? comment.slice(0, previewLen) +
           (comment.length > previewLen ? "…" : "")
         : null,
-      createdAtIso: tsToIso(data.createdAt),
+      createdAt: tsToIso(data.createdAt),
     };
   });
 
@@ -227,8 +227,8 @@ async function getCityDetails(slug) {
     tagline: cityData.tagline ?? null,
     description: cityData.description ?? null,
     highlights: Array.isArray(cityData.highlights) ? cityData.highlights : [],
-    createdAtIso: tsToIso(cityData.createdAt),
-    updatedAtIso: tsToIso(cityData.updatedAt),
+    createdAt: tsToIso(cityData.createdAt),
+    updatedAt: tsToIso(cityData.updatedAt),
   };
 
   return {

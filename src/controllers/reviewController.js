@@ -18,6 +18,7 @@ function toPublicReview(docId, data) {
     cityId: data.cityId,
     ratings: data.ratings,
     comment: data.comment ?? null,
+    isEdited: data.isEdited ?? false,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   });
@@ -30,6 +31,7 @@ function toMyReview(docId, data) {
     userId: data.userId, // keep for now
     ratings: data.ratings,
     comment: data.comment ?? null,
+    isEdited: data.isEdited ?? false,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   });

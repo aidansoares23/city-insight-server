@@ -10,27 +10,28 @@ function tsToIso(ts) {
 
 function withIsoTimestamps(obj) {
   if (!obj || typeof obj !== "object") return obj;
+  const { createdAt, updatedAt, ...rest } = obj;
   return {
-    ...obj,
-    createdAtIso: tsToIso(obj.createdAt),
-    updatedAtIso: tsToIso(obj.updatedAt),
+    ...rest,
+    createdAt: tsToIso(createdAt),
+    updatedAt: tsToIso(updatedAt),
   };
 }
 
-// Cursor shape: { id: string, createdAtIso: string|null }
+// Cursor shape: { id: string, createdAt: string|null }
 function buildNextCursorFromDoc(doc) {
   const data = doc.data() || {};
-  return { id: doc.id, createdAtIso: tsToIso(data.createdAt) };
+  return { id: doc.id, createdAt: tsToIso(data.createdAt) };
 }
 
 function parseCursorFromQuery(query) {
   const cursorId = query.cursorId ? String(query.cursorId).trim() : null;
-  const cursorCreatedAtIso = query.cursorCreatedAtIso
-    ? String(query.cursorCreatedAtIso).trim()
+  const cursorCreatedAt = query.cursorCreatedAt
+    ? String(query.cursorCreatedAt).trim()
     : null;
 
-  if (cursorId && cursorCreatedAtIso) {
-    const dt = new Date(cursorCreatedAtIso);
+  if (cursorId && cursorCreatedAt) {
+    const dt = new Date(cursorCreatedAt);
     if (!Number.isNaN(dt.valueOf())) {
       return {
         id: cursorId,

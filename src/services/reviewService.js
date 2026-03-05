@@ -34,7 +34,10 @@ async function upsertMyReviewForCity({
   const txResult = await db.runTransaction(async (tx) => {
     const citySnap = await tx.get(cityRef);
     if (!citySnap.exists) {
-      throw new AppError("City not found", { status: 404, code: "CITY_NOT_FOUND" });
+      throw new AppError("City not found", {
+        status: 404,
+        code: "CITY_NOT_FOUND",
+      });
     }
 
     const reviewSnap = await tx.get(reviewRef);
@@ -68,14 +71,27 @@ async function upsertMyReviewForCity({
     const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
     const livability = computeLivabilityV0({ averages, metrics });
 
-    const now = admin.firestore.Timestamp.fromDate(new Date());
+    // const now = admin.firestore.Timestamp.fromDate(new Date());
+    // const reviewPatch = {
+    //   userId: cleanUserId,
+    //   cityId,
+    //   ratings: normalizedRatings,
+    //   comment: incomingComment,
+    //   ...(isNew ? serverTimestamps() : updatedTimestamp()),
+    // };
+    // tx.set(reviewRef, reviewPatch, { merge: true });
+    const now = admin.firestore.Timestamp.now();
+
     const reviewPatch = {
       userId: cleanUserId,
       cityId,
       ratings: normalizedRatings,
       comment: incomingComment,
-      ...(isNew ? serverTimestamps() : updatedTimestamp()),
+      ...(isNew
+        ? { createdAt: now, updatedAt: now, isEdited: false }
+        : { updatedAt: now, isEdited: true }),
     };
+
     tx.set(reviewRef, reviewPatch, { merge: true });
 
     const statsPatch = {
@@ -96,6 +112,7 @@ async function upsertMyReviewForCity({
       comment: incomingComment,
       createdAt: isNew ? now : (prevData.createdAt ?? now),
       updatedAt: now,
+      isEdited: !isNew,
     };
 
     return { isNew, reviewData };
@@ -127,12 +144,18 @@ async function deleteMyReviewForCity({ cityId, userId }) {
   await db.runTransaction(async (tx) => {
     const citySnap = await tx.get(cityRef);
     if (!citySnap.exists) {
-      throw new AppError("City not found", { status: 404, code: "CITY_NOT_FOUND" });
+      throw new AppError("City not found", {
+        status: 404,
+        code: "CITY_NOT_FOUND",
+      });
     }
 
     const reviewSnap = await tx.get(reviewRef);
     if (!reviewSnap.exists) {
-      throw new AppError("Review not found", { status: 404, code: "NOT_FOUND" });
+      throw new AppError("Review not found", {
+        status: 404,
+        code: "NOT_FOUND",
+      });
     }
 
     const existing = reviewSnap.data() || {};
@@ -185,7 +208,10 @@ async function listReviewsForCity({ cityId, pageSize, cursor }) {
     .limit(pageSize);
 
   if (cursor?.id && !cursor?.createdAt) {
-    throw new AppError("Malformed cursor: id requires createdAt", { status: 400, code: "BAD_CURSOR" });
+    throw new AppError("Malformed cursor: id requires createdAt", {
+      status: 400,
+      code: "BAD_CURSOR",
+    });
   }
 
   // Preferred cursor: (createdAt, id)
