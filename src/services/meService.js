@@ -1,6 +1,7 @@
 // src/services/meService.js
 const { db } = require("../config/firebase");
 const { serverTimestamps, updatedTimestamp } = require("../utils/timestamps");
+const { tsToIso } = require("../lib/firestore");
 
 async function upsertMeFromAuthClaims(userClaims) {
   const sub = userClaims?.sub;
@@ -52,11 +53,13 @@ async function listMyReviews({ userId, limit = 50 }) {
   return snap.docs.map((d) => {
     const data = d.data() || {};
     return {
+      id: d.id,
       cityId: data.cityId,
       ratings: data.ratings,
       comment: data.comment ?? null,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
+      isEdited: data.isEdited ?? false,
+      createdAt: tsToIso(data.createdAt),
+      updatedAt: tsToIso(data.updatedAt),
     };
   });
 }
