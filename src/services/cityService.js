@@ -146,7 +146,9 @@ async function listCities({ limit, q, sort } = {}) {
 async function getCityBySlug(slug) {
   const cityId = normalizeCityIdFromParam(slug);
   const snap = await db.collection("cities").doc(cityId).get();
-  if (!snap.exists) return null;
+  if (!snap.exists) {
+    throw new AppError("City not found", { status: 404, code: "NOT_FOUND" });
+  }
   return { id: snap.id, data: snap.data() || {} };
 }
 

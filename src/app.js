@@ -8,7 +8,7 @@ const { NODE_ENV } = require("./config/env");
 // Route modules
 const cityRoutes = require("./routes/cityRoutes");
 const meRoutes = require("./routes/meRoutes");
-const authRoutes = require("./routes/authRoutes"); // NEW
+const authRoutes = require("./routes/authRoutes");
 
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandlers");
 
@@ -59,7 +59,7 @@ app.get("/health", (req, res) => {
 });
 
 // Routes
-app.use("/api/auth", authRoutes); // NEW
+app.use("/api/auth", authRoutes);
 app.use("/api/cities", cityRoutes);
 app.use("/api/me", meRoutes);
 

@@ -18,11 +18,6 @@ async function listCities(req, res, next) {
 async function getCityBySlug(req, res, next) {
   try {
     const found = await cityService.getCityBySlug(req.params.slug);
-    if (!found) {
-      return res.status(404).json({
-        error: { code: "NOT_FOUND", message: "City not found" },
-      });
-    }
     return res.json({
       city: withIsoTimestamps({ id: found.id, ...found.data }),
     });

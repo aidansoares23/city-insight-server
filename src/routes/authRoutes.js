@@ -86,7 +86,7 @@ router.post("/login", requireCsrfLite, async (req, res, next) => {
   }
 });
 
-router.post("/logout", requireCsrfLite, (req, res) => {
+router.post("/logout", requireCsrfLite, (_req, res) => {
   // Clear cookie (same options matter)
   res.clearCookie("ci_session", { ...cookieOptions(), maxAge: 0 });
   return res.json({ ok: true });

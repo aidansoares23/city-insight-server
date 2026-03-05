@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 const { Command } = require("commander");
-// const { initAdmin } = require("../scripts/lib/initAdmin");
 const { initAdmin } = require("./lib/initAdmin");
 
 // Tasks

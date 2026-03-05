@@ -52,6 +52,8 @@ setMock("src/config/firebase.js", {
   db: {},
 });
 
+const { AppError } = require("../src/lib/errors");
+
 setMock("src/services/cityService.js", {
   async listCities({ limit, q, sort }) {
     return {
@@ -72,7 +74,7 @@ setMock("src/services/cityService.js", {
     };
   },
   async getCityBySlug() {
-    return null;
+    throw new AppError("City not found", { status: 404, code: "NOT_FOUND" });
   },
   async getCityDetails() {
     return { city: null, stats: null, metrics: null, livability: null, reviews: [] };

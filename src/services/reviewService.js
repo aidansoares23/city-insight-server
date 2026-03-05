@@ -39,10 +39,8 @@ async function upsertMyReviewForCity({
 
     const reviewSnap = await tx.get(reviewRef);
     const isNew = !reviewSnap.exists;
-    const prevRatingsRaw = reviewSnap.exists
-      ? (reviewSnap.data() || {}).ratings
-      : null;
-    const prevRatings = normalizeRatings(prevRatingsRaw);
+    const prevData = reviewSnap.exists ? reviewSnap.data() || {} : {};
+    const prevRatings = normalizeRatings(prevData.ratings);
 
     const [statsSnap, metricsSnap] = await Promise.all([
       tx.get(statsRef),
@@ -53,10 +51,11 @@ async function upsertMyReviewForCity({
     const prevCount = Number(prevStats.count ?? 0);
     const prevSums = normalizeRatings(prevStats.sums);
 
+    const normalizedRatings = normalizeRatings(incomingRatings);
     const deltaCount = isNew ? 1 : 0;
     const deltaRatings = isNew
-      ? normalizeRatings(incomingRatings)
-      : subRatings(normalizeRatings(incomingRatings), prevRatings);
+      ? normalizedRatings
+      : subRatings(normalizedRatings, prevRatings);
 
     const nextCount = Math.max(0, prevCount + deltaCount);
     const nextSums = addRatings(prevSums, deltaRatings);
@@ -69,10 +68,11 @@ async function upsertMyReviewForCity({
     const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
     const livability = computeLivabilityV0({ averages, metrics });
 
+    const now = admin.firestore.Timestamp.fromDate(new Date());
     const reviewPatch = {
       userId: cleanUserId,
       cityId,
-      ratings: incomingRatings,
+      ratings: normalizedRatings,
       comment: incomingComment,
       ...(isNew ? serverTimestamps() : updatedTimestamp()),
     };
@@ -87,14 +87,24 @@ async function upsertMyReviewForCity({
     };
     tx.set(statsRef, statsPatch, { merge: true });
 
-    return { isNew, reviewId };
+    // Build response data with a local timestamp to avoid a post-transaction read.
+    // createdAt is preserved from the existing doc on updates.
+    const reviewData = {
+      userId: cleanUserId,
+      cityId,
+      ratings: normalizedRatings,
+      comment: incomingComment,
+      createdAt: isNew ? now : (prevData.createdAt ?? now),
+      updatedAt: now,
+    };
+
+    return { isNew, reviewData };
   });
 
-  const savedSnap = await db.collection("reviews").doc(reviewId).get();
   return {
     created: txResult.isNew,
     reviewId,
-    review: savedSnap.data() || null,
+    review: txResult.reviewData,
   };
 }
 
