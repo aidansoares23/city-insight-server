@@ -92,6 +92,8 @@ async function listCities({ limit, q, sort } = {}) {
       slug: c.slug,
       name: c.name,
       state: c.state,
+      lat: c.lat,
+      lng: c.lng,
 
       reviewCount,
       livabilityScore,
