@@ -185,8 +185,8 @@ test("POST /api/cities/:slug/reviews rejects invalid review body", async () => {
       body: {
         ratings: {
           safety: 0,
-          cost: 11,
-          traffic: 5,
+          affordability: 11,
+          walkability: 5,
           cleanliness: 5,
           overall: 5,
         },
@@ -208,8 +208,8 @@ test("POST /api/cities/:slug/reviews accepts valid body", async () => {
       body: {
         ratings: {
           safety: 7,
-          cost: 4,
-          traffic: 5,
+          affordability: 4,
+          walkability: 5,
           cleanliness: 6,
           overall: 6,
         },
