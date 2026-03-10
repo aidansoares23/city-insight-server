@@ -195,18 +195,18 @@ function clamp(n, min, max) {
 
 function generateRatings(cityIndex, userIndex) {
   const cityBase = [
-    { safety: 6, cost: 2, traffic: 4, cleanliness: 5 }, // SF
-    { safety: 7, cost: 3, traffic: 5, cleanliness: 6 }, // SJ
-    { safety: 5, cost: 2, traffic: 3, cleanliness: 4 }, // LA
-    { safety: 6, cost: 3, traffic: 4, cleanliness: 6 }, // SD
-    { safety: 7, cost: 4, traffic: 3, cleanliness: 6 }, // SAC
-  ][cityIndex] || { safety: 6, cost: 3, traffic: 4, cleanliness: 5 };
+    { safety: 6, affordability: 2, walkability: 4, cleanliness: 5 }, // SF
+    { safety: 7, affordability: 3, walkability: 5, cleanliness: 6 }, // SJ
+    { safety: 5, affordability: 2, walkability: 3, cleanliness: 4 }, // LA
+    { safety: 6, affordability: 3, walkability: 4, cleanliness: 6 }, // SD
+    { safety: 7, affordability: 4, walkability: 3, cleanliness: 6 }, // SAC
+  ][cityIndex] || { safety: 6, affordability: 3, walkability: 4, cleanliness: 5 };
 
   const delta = (userIndex % 3) - 1; // -1,0,1
   const safety = clamp(cityBase.safety + delta, 1, 10);
-  const cost = clamp(cityBase.cost + (delta === 1 ? 0 : -1), 1, 10);
-  const traffic = clamp(
-    cityBase.traffic + (userIndex % 2 === 0 ? 1 : 0),
+  const affordability = clamp(cityBase.affordability + (delta === 1 ? 0 : -1), 1, 10);
+  const walkability = clamp(
+    cityBase.walkability + (userIndex % 2 === 0 ? 1 : 0),
     1,
     10,
   );
@@ -216,12 +216,12 @@ function generateRatings(cityIndex, userIndex) {
     10,
   );
   const overall = clamp(
-    Math.round((safety + cost + traffic + cleanliness) / 4),
+    Math.round((safety + affordability + walkability + cleanliness) / 4),
     1,
     10,
   );
 
-  return { safety, cost, traffic, cleanliness, overall };
+  return { safety, affordability, walkability, cleanliness, overall };
 }
 
 function pick(arr, i) {
@@ -281,16 +281,16 @@ function generateComment(cityId, ratings, userIndex) {
         : "I generally felt safe day-to-day.";
 
   const costNote =
-    ratings.cost <= 3
+    ratings.affordability <= 3
       ? "Costs felt high for what you get."
-      : ratings.cost <= 6
+      : ratings.affordability <= 6
         ? "Costs felt manageable with a solid budget."
         : "Cost/value felt pretty solid.";
 
   const trafficNote =
-    ratings.traffic <= 3
+    ratings.walkability <= 3
       ? "Getting around could be frustrating at peak times."
-      : ratings.traffic <= 6
+      : ratings.walkability <= 6
         ? "Traffic was noticeable, but I could plan around it."
         : "Getting around felt relatively easy most days.";
 
@@ -325,7 +325,7 @@ function buildEmptyStats(cityId) {
   return {
     cityId,
     count: 0,
-    sums: { safety: 0, cost: 0, traffic: 0, cleanliness: 0, overall: 0 },
+    sums: { safety: 0, affordability: 0, walkability: 0, cleanliness: 0, overall: 0 },
     livability: { version: "v0", score: null },
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };

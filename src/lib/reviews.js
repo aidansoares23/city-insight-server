@@ -4,8 +4,8 @@ const { isPlainObject } = require("./objects");
 
 const REQUIRED_RATING_KEYS = [
   "safety",
-  "cost",
-  "traffic",
+  "affordability",
+  "walkability",
   "cleanliness",
   "overall",
 ];
