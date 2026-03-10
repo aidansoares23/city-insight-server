@@ -55,6 +55,8 @@ async function listCities({ limit, q, sort } = {}) {
       slug: data.slug ?? d.id,
       name: data.name ?? null,
       state: data.state ?? null,
+      lat: data.lat ?? null,
+      lng: data.lng ?? null,
     };
   });
 
@@ -200,8 +202,8 @@ async function getCityDetails(slug) {
       ratings: {
         overall: data?.ratings?.overall ?? null,
         safety: data?.ratings?.safety ?? null,
-        cost: data?.ratings?.cost ?? null,
-        traffic: data?.ratings?.traffic ?? null,
+        affordability: data?.ratings?.affordability ?? null,
+        walkability: data?.ratings?.walkability ?? null,
         cleanliness: data?.ratings?.cleanliness ?? null,
       },
       commentPreview: comment
