@@ -30,8 +30,8 @@ const {
   computeLivabilityV0,
 } = require("../src/utils/cityStats");
 
-const ALL_KEYS = ["safety", "cost", "traffic", "cleanliness", "overall"];
-const VALID_SUMS = { safety: 7, cost: 5, traffic: 4, cleanliness: 8, overall: 6 };
+const ALL_KEYS = ["safety", "affordability", "walkability", "cleanliness", "overall"];
+const VALID_SUMS = { safety: 7, affordability: 5, walkability: 4, cleanliness: 8, overall: 6 };
 
 // ─── normalizeRatings ─────────────────────────────────────────────────────────
 
@@ -46,10 +46,10 @@ test("normalizeRatings: missing keys become 0", () => {
 });
 
 test("normalizeRatings: null/NaN values become 0", () => {
-  const result = normalizeRatings({ safety: null, cost: NaN, traffic: undefined });
+  const result = normalizeRatings({ safety: null, affordability: NaN, walkability: undefined });
   assert.equal(result.safety, 0);
-  assert.equal(result.cost, 0);
-  assert.equal(result.traffic, 0);
+  assert.equal(result.affordability, 0);
+  assert.equal(result.walkability, 0);
 });
 
 test("normalizeRatings: non-object input returns all zeros", () => {
@@ -60,16 +60,16 @@ test("normalizeRatings: non-object input returns all zeros", () => {
 // ─── addRatings / subRatings ──────────────────────────────────────────────────
 
 test("addRatings: sums corresponding keys", () => {
-  const a = { safety: 3, cost: 2, traffic: 1, cleanliness: 4, overall: 5 };
-  const b = { safety: 1, cost: 1, traffic: 1, cleanliness: 1, overall: 1 };
+  const a = { safety: 3, affordability: 2, walkability: 1, cleanliness: 4, overall: 5 };
+  const b = { safety: 1, affordability: 1, walkability: 1, cleanliness: 1, overall: 1 };
   const result = addRatings(a, b);
   assert.equal(result.safety, 4);
   assert.equal(result.overall, 6);
 });
 
 test("subRatings: subtracts corresponding keys", () => {
-  const a = { safety: 10, cost: 8, traffic: 6, cleanliness: 4, overall: 5 };
-  const b = { safety: 3, cost: 2, traffic: 1, cleanliness: 1, overall: 2 };
+  const a = { safety: 10, affordability: 8, walkability: 6, cleanliness: 4, overall: 5 };
+  const b = { safety: 3, affordability: 2, walkability: 1, cleanliness: 1, overall: 2 };
   const result = subRatings(a, b);
   assert.equal(result.safety, 7);
   assert.equal(result.overall, 3);
@@ -83,7 +83,7 @@ test("subRatings: missing keys in b treated as 0", () => {
 // ─── computeAverages ─────────────────────────────────────────────────────────
 
 test("computeAverages: divides sums by count", () => {
-  const sums = { safety: 14, cost: 10, traffic: 8, cleanliness: 16, overall: 12 };
+  const sums = { safety: 14, affordability: 10, walkability: 8, cleanliness: 16, overall: 12 };
   const result = computeAverages(2, sums);
   assert.equal(result.safety, 7);
   assert.equal(result.overall, 6);
@@ -95,7 +95,7 @@ test("computeAverages: count=0 returns all null", () => {
 });
 
 test("computeAveragesFromStats: extracts count, sums, averages from stats doc", () => {
-  const doc = { count: 2, sums: { safety: 14, cost: 10, traffic: 8, cleanliness: 16, overall: 12 } };
+  const doc = { count: 2, sums: { safety: 14, affordability: 10, walkability: 8, cleanliness: 16, overall: 12 } };
   const { count, averages } = computeAveragesFromStats(doc);
   assert.equal(count, 2);
   assert.equal(averages.safety, 7);
@@ -116,7 +116,7 @@ test("assertSumsNonNegative: throws when a key goes negative", () => {
 });
 
 test("assertSumsNonNegative: allows values within epsilon", () => {
-  const almostZero = { ...VALID_SUMS, cost: -1e-10 };
+  const almostZero = { ...VALID_SUMS, affordability: -1e-10 };
   assert.doesNotThrow(() => assertSumsNonNegative({ cityId: "city-x", sums: almostZero }));
 });
 

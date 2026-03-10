@@ -11,7 +11,7 @@ const {
   normalizeIncomingComment,
 } = require("../src/lib/reviews");
 
-const VALID_RATINGS = { safety: 7, cost: 5, traffic: 4, cleanliness: 8, overall: 6 };
+const VALID_RATINGS = { safety: 7, affordability: 5, walkability: 4, cleanliness: 8, overall: 6 };
 
 // ─── makeReviewId ─────────────────────────────────────────────────────────────
 
@@ -55,15 +55,15 @@ test("validateReviewBody: rating out of range (0) fails", () => {
 });
 
 test("validateReviewBody: rating out of range (11) fails", () => {
-  const result = validateReviewBody({ ratings: { ...VALID_RATINGS, cost: 11 } });
+  const result = validateReviewBody({ ratings: { ...VALID_RATINGS, affordability: 11 } });
   assert.equal(result.ok, false);
-  assert.ok(result.errors.some((e) => e.includes("cost")));
+  assert.ok(result.errors.some((e) => e.includes("affordability")));
 });
 
 test("validateReviewBody: non-integer rating fails", () => {
-  const result = validateReviewBody({ ratings: { ...VALID_RATINGS, traffic: 5.5 } });
+  const result = validateReviewBody({ ratings: { ...VALID_RATINGS, walkability: 5.5 } });
   assert.equal(result.ok, false);
-  assert.ok(result.errors.some((e) => e.includes("traffic")));
+  assert.ok(result.errors.some((e) => e.includes("walkability")));
 });
 
 test("validateReviewBody: string rating fails", () => {
@@ -115,8 +115,8 @@ test("normalizeIncomingRatings: missing keys default to 0", () => {
 });
 
 test("normalizeIncomingRatings: non-numeric values default to 0", () => {
-  const result = normalizeIncomingRatings({ ...VALID_RATINGS, cost: "abc" });
-  assert.equal(result.cost, 0);
+  const result = normalizeIncomingRatings({ ...VALID_RATINGS, affordability: "abc" });
+  assert.equal(result.affordability, 0);
 });
 
 // ─── normalizeIncomingComment ────────────────────────────────────────────────
