@@ -2,6 +2,7 @@
 const { db } = require("../config/firebase");
 const { serverTimestamps, updatedTimestamp } = require("../utils/timestamps");
 const { tsToIso } = require("../lib/firestore");
+const { deleteMyReviewForCity } = require("./reviewService");
 
 async function upsertMeFromAuthClaims(userClaims) {
   const sub = userClaims?.sub;
@@ -64,4 +65,26 @@ async function listMyReviews({ userId, limit = 50 }) {
   });
 }
 
-module.exports = { upsertMeFromAuthClaims, listMyReviews };
+async function deleteAccount({ userId }) {
+  const uid = String(userId || "").trim();
+  if (!uid) {
+    const err = new Error("Missing user identity");
+    err.status = 401;
+    err.code = "UNAUTHENTICATED";
+    throw err;
+  }
+
+  const reviews = await listMyReviews({ userId: uid, limit: 100 });
+
+  for (const review of reviews) {
+    if (review.cityId) {
+      await deleteMyReviewForCity({ cityId: review.cityId, userId: uid });
+    }
+  }
+
+  await db.collection("users").doc(uid).delete();
+
+  return { deleted: true };
+}
+
+module.exports = { upsertMeFromAuthClaims, listMyReviews, deleteAccount };

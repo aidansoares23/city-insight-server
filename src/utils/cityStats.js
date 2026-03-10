@@ -1,6 +1,11 @@
 const { db } = require("../config/firebase");
 const { updatedTimestamp } = require("./timestamps");
-const { toFiniteNumber, clamp0to100, normalizeSafetyTo10 } = require("../lib/numbers");
+const {
+  toFiniteNumber,
+  clamp0to100,
+  medianRentToAffordability100,
+  normalizeSafetyTo10,
+} = require("../lib/numbers");
 const { isPlainObject } = require("../lib/objects");
 const { REQUIRED_RATING_KEYS: RATING_KEYS } = require("../lib/reviews");
 
@@ -75,12 +80,7 @@ function computeLivabilityV0({ averages, metrics }) {
     ? clamp0to100(Math.round(safetyRaw * 10))
     : null;
 
-  const RENT_MAX = 3500;
-  const rentRaw = toFiniteNumber(metrics?.medianRent, NaN);
-  const rentScore =
-    Number.isFinite(rentRaw) && rentRaw > 0
-      ? clamp0to100(Math.round((1 - rentRaw / RENT_MAX) * 100))
-      : null;
+  const rentScore = medianRentToAffordability100(metrics?.medianRent);
 
   const signals = [
     { score: reviewScore, weight: 0.5  },

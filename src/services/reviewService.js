@@ -70,16 +70,6 @@ async function upsertMyReviewForCity({
     const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
     const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
     const livability = computeLivabilityV0({ averages, metrics });
-
-    // const now = admin.firestore.Timestamp.fromDate(new Date());
-    // const reviewPatch = {
-    //   userId: cleanUserId,
-    //   cityId,
-    //   ratings: normalizedRatings,
-    //   comment: incomingComment,
-    //   ...(isNew ? serverTimestamps() : updatedTimestamp()),
-    // };
-    // tx.set(reviewRef, reviewPatch, { merge: true });
     const now = admin.firestore.Timestamp.now();
 
     const reviewPatch = {

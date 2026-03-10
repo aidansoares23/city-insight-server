@@ -11,6 +11,7 @@ const meRoutes = require("./routes/meRoutes");
 const authRoutes = require("./routes/authRoutes");
 
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandlers");
+const { apiLimiter, authLimiter } = require("./middleware/rateLimiter");
 
 const app = express();
 
@@ -57,6 +58,10 @@ app.get("/health", (req, res) => {
     env: process.env.NODE_ENV || "development",
   });
 });
+
+// Rate limiting
+app.use("/api/", apiLimiter);
+app.use("/api/auth/login", authLimiter);
 
 // Routes
 app.use("/api/auth", authRoutes);

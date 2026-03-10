@@ -7,6 +7,8 @@ const {
   toFiniteNumber,
   clamp0to10,
   clamp0to100,
+  medianRentToAffordability100,
+  medianRentToAffordability10,
   normalizeSafetyTo10,
 } = require("../src/lib/numbers");
 
@@ -99,6 +101,29 @@ test("clamp0to100: rounds and clamps values", () => {
 test("clamp0to100: returns null for null input", () => {
   assert.equal(clamp0to100(null), null);
   assert.equal(clamp0to100(undefined), null);
+});
+
+// ─── medianRentToAffordability* ─────────────────────────────────────────────
+
+test("medianRentToAffordability100: converts median rent into a 0-100 affordability score", () => {
+  assert.equal(medianRentToAffordability100(0), 100);
+  assert.equal(medianRentToAffordability100(2100), 40);
+  assert.equal(medianRentToAffordability100(3500), 0);
+  assert.equal(medianRentToAffordability100(5000), 0);
+});
+
+test("medianRentToAffordability10: converts median rent into a 0-10 affordability score", () => {
+  assert.equal(medianRentToAffordability10(0), 10);
+  assert.equal(medianRentToAffordability10(2100), 4);
+  assert.equal(medianRentToAffordability10(3500), 0);
+  assert.equal(medianRentToAffordability10(5000), 0);
+});
+
+test("medianRentToAffordability*: returns null for missing or invalid rent values", () => {
+  assert.equal(medianRentToAffordability100(null), null);
+  assert.equal(medianRentToAffordability100(-1), null);
+  assert.equal(medianRentToAffordability10(undefined), null);
+  assert.equal(medianRentToAffordability10("abc"), null);
 });
 
 // ─── normalizeSafetyTo10 ─────────────────────────────────────────────────────

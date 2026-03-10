@@ -1,6 +1,10 @@
 const { db } = require("../config/firebase");
 const { updatedTimestamp } = require("./timestamps");
-const { toNumOrNull, normalizeSafetyTo10 } = require("../lib/numbers");
+const {
+  toNumOrNull,
+  medianRentToAffordability10,
+  normalizeSafetyTo10,
+} = require("../lib/numbers");
 const { isPlainObject } = require("../lib/objects");
 const { buildNamespacedMetaUpdate } = require("../lib/meta");
 
@@ -85,13 +89,23 @@ async function upsertCityMetrics(cityId, patch, options = {}) {
 async function getCityMetrics(cityId) {
   const snap = await db.collection("city_metrics").doc(cityId).get();
   if (!snap.exists) {
-    return { cityId, medianRent: null, population: null, safetyScore: null, crimeIndexPer100k: null, meta: null };
+    return {
+      cityId,
+      medianRent: null,
+      costScore: null,
+      population: null,
+      safetyScore: null,
+      crimeIndexPer100k: null,
+      meta: null,
+    };
   }
 
   const d = snap.data() || {};
+  const medianRent = toNumOrNull(d.medianRent);
   return {
     cityId,
-    medianRent:       toNumOrNull(d.medianRent),
+    medianRent,
+    costScore:        medianRentToAffordability10(medianRent),
     population:       toNumOrNull(d.population),
     safetyScore:      normalizeSafetyTo10(d.safetyScore),
     crimeIndexPer100k: toNumOrNull(d.crimeIndexPer100k),

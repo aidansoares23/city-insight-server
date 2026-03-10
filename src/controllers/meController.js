@@ -24,4 +24,14 @@ async function listMyReviews(req, res, next) {
   }
 }
 
-module.exports = { getMe, listMyReviews };
+async function deleteAccount(req, res, next) {
+  try {
+    const userId = req.user?.sub;
+    await meService.deleteAccount({ userId });
+    res.json({ ok: true, deleted: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getMe, listMyReviews, deleteAccount };
