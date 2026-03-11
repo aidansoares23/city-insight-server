@@ -18,8 +18,8 @@ function cookieOptions() {
 }
 
 function requireCsrfLite(req, res, next) {
-  const xrw = req.get("x-requested-with");
-  if (xrw !== "XMLHttpRequest") {
+  const xRequestedWith = req.get("x-requested-with");
+  if (xRequestedWith !== "XMLHttpRequest") {
     return res.status(403).json({
       error: { code: "CSRF", message: "Missing CSRF header" },
     });
@@ -56,14 +56,14 @@ router.post("/login", requireCsrfLite, async (req, res, next) => {
       idToken,
       audience: GOOGLE_CLIENT_ID,
     });
-    const p = ticket.getPayload();
+    const googlePayload = ticket.getPayload();
 
     const sessionToken = jwt.sign(
       {
-        sub: p.sub,
-        email: p.email || null,
-        name: p.name || null,
-        picture: p.picture || null,
+        sub: googlePayload.sub,
+        email: googlePayload.email || null,
+        name: googlePayload.name || null,
+        picture: googlePayload.picture || null,
       },
       process.env.SESSION_JWT_SECRET,
       { expiresIn: "7d" },
@@ -74,10 +74,10 @@ router.post("/login", requireCsrfLite, async (req, res, next) => {
     return res.json({
       ok: true,
       user: {
-        sub: p.sub,
-        email: p.email || null,
-        name: p.name || null,
-        picture: p.picture || null,
+        sub: googlePayload.sub,
+        email: googlePayload.email || null,
+        name: googlePayload.name || null,
+        picture: googlePayload.picture || null,
       },
     });
   } catch (err) {

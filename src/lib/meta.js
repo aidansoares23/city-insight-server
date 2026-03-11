@@ -11,17 +11,17 @@ const { isPlainObject } = require("./objects");
  * This returns an object suitable for Firestore update() with nested field paths.
  */
 function buildNamespacedMetaUpdate(owner, meta) {
-  const o = owner ? String(owner).trim() : "";
-  if (!o) return null;
+  const namespace = owner ? String(owner).trim() : "";
+  if (!namespace) return null;
 
   // Allow explicit clear (set to null)
-  if (meta === null) return { [`meta.${o}`]: null };
+  if (meta === null) return { [`meta.${namespace}`]: null };
 
   // Ignore undefined or non-object
   if (meta === undefined) return null;
   if (!isPlainObject(meta)) return null;
 
-  return { [`meta.${o}`]: meta };
+  return { [`meta.${namespace}`]: meta };
 }
 
 module.exports = { buildNamespacedMetaUpdate };

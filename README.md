@@ -17,6 +17,9 @@ REST API backend for City Insight, a platform where users discover cities, brows
 - [Admin CLI](#admin-cli)
 - [Scoring System](#scoring-system)
 - [Architecture](#architecture)
+  - [Request lifecycle](#request-lifecycle)
+  - [Auth flow](#auth-flow)
+  - [Adding a new metric pipeline](#adding-a-new-metric-pipeline)
 
 ---
 
@@ -104,15 +107,16 @@ npm test
 
 Uses Node.js's built-in test runner — no external framework needed. All Firestore calls are mocked, so no Firebase connection is required.
 
-**84 tests, all passing** across 5 files:
+**104 tests, all passing** across 6 files:
 
-| File                           | What it covers                                  |
-| ------------------------------ | ----------------------------------------------- |
-| `test/app.smoke.test.js`       | HTTP routes, auth, CSRF                         |
-| `test/lib.numbers.test.js`     | Numeric utility functions                       |
-| `test/lib.reviews.test.js`     | Review validation + deterministic ID generation |
-| `test/utils.cityStats.test.js` | Aggregation math + livability formula           |
-| `test/tasks.safety.test.js`    | Safety score formula + CSV parsing              |
+| File                                 | Tests | What it covers                                  |
+| ------------------------------------ | ----- | ----------------------------------------------- |
+| `test/app.smoke.test.js`             | 8     | HTTP routes, auth, CSRF                         |
+| `test/lib.numbers.test.js`           | 20    | Numeric utility functions                       |
+| `test/lib.reviews.test.js`           | 20    | Review validation + deterministic ID generation |
+| `test/middleware.requireAuth.test.js`| 17    | JWT validation, dev bypass, CSRF-lite           |
+| `test/utils.cityStats.test.js`       | 24    | Aggregation math + livability formula           |
+| `test/tasks.safety.test.js`          | 15    | Safety score formula + CSV parsing              |
 
 CI runs `npm test` on every push and pull request to `main` via GitHub Actions.
 
@@ -142,6 +146,22 @@ Authenticated routes require a valid `ci_session` cookie (set automatically on l
 ```
 
 Common codes: `NOT_FOUND`, `UNAUTHENTICATED`, `VALIDATION_ERROR`, `CSRF`, `CORS`, `INTERNAL`.
+
+**For contributors — how errors propagate:**
+
+Services and controllers signal errors by throwing `AppError` from `lib/errors.js`. The central error handler in `middleware/errorHandlers.js` catches it and formats the response. Never call `res.status(...).json(...)` directly for domain errors — throw instead:
+
+```js
+const { AppError } = require("../lib/errors");
+
+// In a service:
+throw new AppError("City not found", { status: 404, code: "NOT_FOUND" });
+
+// In a controller, unexpected errors are passed to Express's error pipeline:
+} catch (err) {
+  next(err);
+}
+```
 
 ---
 
@@ -201,17 +221,32 @@ The session cookie (`ci_session`) is `httpOnly`, 7-day expiry, `sameSite: none` 
   "ratings": {
     "overall": 8,
     "safety": 7,
-    "cost": 6,
-    "traffic": 5,
+    "affordability": 6,
+    "walkability": 5,
     "cleanliness": 9
   },
   "comment": "Optional. Max 800 characters."
 }
 ```
 
-All rating fields are required integers from **1–10**.
+All five rating fields (`overall`, `safety`, `affordability`, `walkability`, `cleanliness`) are required integers from **1–10**.
 
-**Pagination:** use `pageSize` (default 10, max 50) and pass the `nextCursor` from each response as `cursorId` + `cursorCreatedAtIso` on the next request.
+**Pagination:**
+
+Use `pageSize` (default 10, max 50). Each response includes a `nextCursor` object; pass its fields as query params on the next request to advance the page:
+
+```bash
+# First page
+GET /api/cities/portland-or/reviews?pageSize=10
+
+# Response includes:
+# "nextCursor": { "id": "abc123", "createdAt": "2024-11-01T12:00:00.000Z" }
+
+# Next page — pass both cursor fields
+GET /api/cities/portland-or/reviews?pageSize=10&cursorId=abc123&cursorCreatedAt=2024-11-01T12:00:00.000Z
+```
+
+`nextCursor` is `null` when there are no more results. Both `cursorId` and `cursorCreatedAt` must be provided together — passing only one is a `400 BAD_CURSOR` error.
 
 ---
 
@@ -389,13 +424,32 @@ test/                       # Node built-in test runner, all services mocked
 
 ### Firestore collections
 
-| Collection     | Key                         | Contents                                               |
-| -------------- | --------------------------- | ------------------------------------------------------ |
-| `cities`       | slug                        | Name, state, lat/lng, tagline, description, highlights |
-| `city_stats`   | slug                        | Review count, rating sums, livability score            |
-| `city_metrics` | slug                        | Population, median rent, safety score, crime index     |
-| `reviews`      | SHA-256(userId:cityId:salt) | Ratings, comment, timestamps                           |
-| `users`        | Google `sub`                | Profile data from Google                               |
+| Collection                        | Key                         | Contents                                               |
+| --------------------------------- | --------------------------- | ------------------------------------------------------ |
+| `cities`                          | slug                        | Name, state, lat/lng, tagline, description, highlights |
+| `city_stats`                      | slug                        | Review count, rating sums, livability score            |
+| `city_metrics`                    | slug                        | Population, median rent, safety score, crime index     |
+| `city_metrics/{slug}/snapshots`   | auto-id                     | Immutable audit log written by each pipeline run: pipeline name, syncedAt, prevValues, newValues, changed flag |
+| `reviews`                         | SHA-256(userId:cityId:salt) | Ratings, comment, timestamps                           |
+| `users`                           | Google `sub`                | Profile data from Google                               |
+
+### Request lifecycle
+
+A request travels through four layers:
+
+```
+routes/        Declares the URL pattern and attaches middleware (requireAuth)
+controllers/   Parses + validates the HTTP request, calls a service, shapes the response
+services/      Business logic, Firestore reads/writes, transactions
+lib/ + utils/  Pure functions — no I/O, fully unit-testable
+```
+
+**Adding a new endpoint:**
+
+1. Add the route in the appropriate `routes/` file.
+2. Write a controller function that validates input and calls a service.
+3. Write (or extend) the service function for the business logic.
+4. Add unit tests in `test/` — mock the Firestore calls with the existing pattern.
 
 ### Auth flow
 
@@ -413,3 +467,27 @@ Client                        Server                       Google
   │                            │  req.user = { sub, ... }     │
   │◀── { user: {...} } ────────│                              │
 ```
+
+### Adding a new metric pipeline
+
+`city_metrics` uses an ownership model to prevent pipelines from clobbering each other's fields. Each pipeline declares which fields it owns; writes outside that set are silently dropped.
+
+**To add a new pipeline (e.g. `walkabilitySync` that writes `walkabilityScore`):**
+
+1. Register it in `utils/cityMetrics.js`:
+
+```js
+const OWNERS = {
+  metricsSync:      new Set(["population", "medianRent"]),
+  safetySync:       new Set(["safetyScore", "crimeIndexPer100k"]),
+  walkabilitySync:  new Set(["walkabilityScore"]),  // ← add this
+};
+```
+
+2. Write a task in `src/scripts/tasks/` that calls `upsertCityMetrics(cityId, patch, { owner: "walkabilitySync" })`.
+
+3. Wire the task into `src/scripts/tasks/run.js` and the CLI in `src/scripts/ci.js`.
+
+4. If the new score should affect livability, update `computeLivabilityV0` in `utils/cityStats.js` and adjust the weights (they are renormalized automatically when signals are missing, so existing cities without the new data won't break).
+
+Each pipeline run writes an immutable snapshot to `city_metrics/{slug}/snapshots` recording what changed, so you can audit or roll back individual pipeline updates.

@@ -2,8 +2,8 @@ const jwt = require("jsonwebtoken");
 const { NODE_ENV, DEV_AUTH_BYPASS } = require("../config/env");
 
 function isLocalhostIp(ip) {
-  const s = String(ip || "");
-  return s === "127.0.0.1" || s === "::1" || s === "::ffff:127.0.0.1";
+  const ipStr = String(ip || "");
+  return ipStr === "127.0.0.1" || ipStr === "::1" || ipStr === "::ffff:127.0.0.1";
 }
 
 function isLocalDevRequest(req) {
@@ -17,16 +17,16 @@ function isLocalDevRequest(req) {
 }
 
 function isStateChangingMethod(req) {
-  const m = String(req.method || "").toUpperCase();
-  return m === "POST" || m === "PUT" || m === "PATCH" || m === "DELETE";
+  const method = String(req.method || "").toUpperCase();
+  return method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
 }
 
 // Blocks cross-site form submits — browsers can't set custom headers in HTML forms.
 function enforceCsrfLite(req, res) {
   if (!isStateChangingMethod(req)) return true;
 
-  const xrw = req.get("x-requested-with");
-  if (xrw !== "XMLHttpRequest") {
+  const xRequestedWith = req.get("x-requested-with");
+  if (xRequestedWith !== "XMLHttpRequest") {
     res.status(403).json({
       error: { code: "CSRF", message: "Missing CSRF header" },
     });

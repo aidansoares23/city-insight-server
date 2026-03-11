@@ -5,28 +5,30 @@ const { tsToIso, buildNextCursorFromDoc } = require("../lib/firestore");
 const { toNumOrNull } = require("../lib/numbers");
 const { AppError } = require("../lib/errors");
 
-function normalizeId(param) {
-  return String(param ?? "")
+function normalizeId(rawId) {
+  return String(rawId ?? "")
     .trim()
     .toLowerCase();
 }
 
+// Cities with no data for a metric (null) sort to the end regardless of direction,
+// so incomplete cities don't crowd the top of sorted lists.
 function cmpNullLastDesc(a, b) {
-  const av = toNumOrNull(a);
-  const bv = toNumOrNull(b);
-  if (av == null && bv == null) return 0;
-  if (av == null) return 1;
-  if (bv == null) return -1;
-  return bv - av;
+  const aNum = toNumOrNull(a);
+  const bNum = toNumOrNull(b);
+  if (aNum == null && bNum == null) return 0;
+  if (aNum == null) return 1;
+  if (bNum == null) return -1;
+  return bNum - aNum;
 }
 
 function cmpNullLastAsc(a, b) {
-  const av = toNumOrNull(a);
-  const bv = toNumOrNull(b);
-  if (av == null && bv == null) return 0;
-  if (av == null) return 1;
-  if (bv == null) return -1;
-  return av - bv;
+  const aNum = toNumOrNull(a);
+  const bNum = toNumOrNull(b);
+  if (aNum == null && bNum == null) return 0;
+  if (aNum == null) return 1;
+  if (bNum == null) return -1;
+  return aNum - bNum;
 }
 
 async function listCities({ limit, q, sort } = {}) {
@@ -46,23 +48,26 @@ async function listCities({ limit, q, sort } = {}) {
     .orderBy("name", "asc")
     .get();
 
-  const baseCities = snap.docs.map((d) => {
-    const data = d.data() || {};
+  const baseCities = snap.docs.map((doc) => {
+    const cityData = doc.data() || {};
     return {
-      id: d.id, // slug
-      slug: data.slug ?? d.id,
-      name: data.name ?? null,
-      state: data.state ?? null,
-      lat: data.lat ?? null,
-      lng: data.lng ?? null,
+      id: doc.id, // slug
+      slug: cityData.slug ?? doc.id,
+      name: cityData.name ?? null,
+      state: cityData.state ?? null,
+      lat: cityData.lat ?? null,
+      lng: cityData.lng ?? null,
     };
   });
 
-  const statsRefs = baseCities.map((c) =>
-    db.collection("city_stats").doc(c.id),
+  // Bulk-fetch stats and metrics in two parallel batched reads instead of N×2
+  // individual reads. db.getAll() preserves input order, so snaps[i] corresponds
+  // to baseCities[i] and no extra lookup is needed when zipping the results.
+  const statsRefs = baseCities.map((city) =>
+    db.collection("city_stats").doc(city.id),
   );
-  const metricsRefs = baseCities.map((c) =>
-    db.collection("city_metrics").doc(c.id),
+  const metricsRefs = baseCities.map((city) =>
+    db.collection("city_metrics").doc(city.id),
   );
 
   const [statsSnaps, metricsSnaps] = await Promise.all([
@@ -70,7 +75,7 @@ async function listCities({ limit, q, sort } = {}) {
     metricsRefs.length ? db.getAll(...metricsRefs) : Promise.resolve([]),
   ]);
 
-  let cities = baseCities.map((c, idx) => {
+  let cities = baseCities.map((city, idx) => {
     const statsDoc = statsSnaps[idx]?.exists
       ? statsSnaps[idx].data() || {}
       : {};
@@ -84,12 +89,12 @@ async function listCities({ limit, q, sort } = {}) {
     const medianRent = metricsDoc?.medianRent ?? null;
 
     return {
-      id: c.id,
-      slug: c.slug,
-      name: c.name,
-      state: c.state,
-      lat: c.lat,
-      lng: c.lng,
+      id: city.id,
+      slug: city.slug,
+      name: city.name,
+      state: city.state,
+      lat: city.lat,
+      lng: city.lng,
 
       reviewCount,
       livabilityScore,
@@ -100,10 +105,10 @@ async function listCities({ limit, q, sort } = {}) {
   });
 
   if (search) {
-    cities = cities.filter((c) => {
-      const hay =
-        `${c.name || ""} ${c.state || ""} ${c.slug || ""}`.toLowerCase();
-      return hay.includes(search);
+    cities = cities.filter((city) => {
+      const searchTarget =
+        `${city.name || ""} ${city.state || ""} ${city.slug || ""}`.toLowerCase();
+      return searchTarget.includes(search);
     });
   }
 
@@ -188,8 +193,8 @@ async function getCityDetails(slug) {
       : { score: null, version: "uncomputed" };
 
   const previewLen = 160;
-  const reviews = reviewsSnap.docs.map((d) => {
-    const data = d.data() || {};
+  const reviews = reviewsSnap.docs.map((doc) => {
+    const data = doc.data() || {};
     const comment = typeof data.comment === "string" ? data.comment : "";
 
     return {

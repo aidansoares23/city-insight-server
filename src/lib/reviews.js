@@ -26,15 +26,15 @@ function validateRatings(ratings) {
   if (!isPlainObject(ratings)) return ["ratings is required (object)"];
 
   for (const key of REQUIRED_RATING_KEYS) {
-    const val = ratings[key];
+    const rating = ratings[key];
 
-    if (typeof val !== "number" || !Number.isFinite(val)) {
+    if (typeof rating !== "number" || !Number.isFinite(rating)) {
       errors.push(`ratings.${key} must be a finite number`);
       continue;
     }
-    if (!Number.isInteger(val))
+    if (!Number.isInteger(rating))
       errors.push(`ratings.${key} must be an integer`);
-    if (val < 1 || val > 10)
+    if (rating < 1 || rating > 10)
       errors.push(`ratings.${key} must be between 1 and 10`);
   }
   return errors;
@@ -60,19 +60,19 @@ function validateReviewBody(body) {
 }
 
 function normalizeIncomingRatings(ratings) {
-  const out = {};
-  for (const k of REQUIRED_RATING_KEYS) {
-    out[k] = Number.isFinite(Number(ratings?.[k]))
-      ? Math.round(Number(ratings[k]))
+  const normalized = {};
+  for (const key of REQUIRED_RATING_KEYS) {
+    normalized[key] = Number.isFinite(Number(ratings?.[key]))
+      ? Math.round(Number(ratings[key]))
       : 0;
   }
-  return out;
+  return normalized;
 }
 
 function normalizeIncomingComment(comment) {
   if (comment == null) return null;
-  const s = String(comment).trim();
-  return s ? s : null;
+  const trimmed = String(comment).trim();
+  return trimmed ? trimmed : null;
 }
 
 module.exports = {

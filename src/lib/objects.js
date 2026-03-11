@@ -1,7 +1,7 @@
 // src/lib/objects.js
 
-function isPlainObject(x) {
-  return x != null && typeof x === "object" && !Array.isArray(x);
+function isPlainObject(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
 module.exports = { isPlainObject };

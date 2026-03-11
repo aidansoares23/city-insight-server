@@ -15,34 +15,34 @@ function clampNonNegative(n) {
 
 // Missing or non-numeric values become 0 — correct for aggregation math.
 function normalizeRatings(ratings) {
-  const src = isPlainObject(ratings) ? ratings : {};
-  const out = {};
-  for (const k of RATING_KEYS)
-    out[k] = Number.isFinite(Number(src[k])) ? Number(src[k]) : 0;
-  return out;
+  const ratingsInput = isPlainObject(ratings) ? ratings : {};
+  const result = {};
+  for (const key of RATING_KEYS)
+    result[key] = Number.isFinite(Number(ratingsInput[key])) ? Number(ratingsInput[key]) : 0;
+  return result;
 }
 
 function addRatings(a, b) {
-  const aa = normalizeRatings(a);
-  const bb = normalizeRatings(b);
-  const out = {};
-  for (const k of RATING_KEYS) out[k] = aa[k] + bb[k];
-  return out;
+  const ratingsA = normalizeRatings(a);
+  const ratingsB = normalizeRatings(b);
+  const result = {};
+  for (const key of RATING_KEYS) result[key] = ratingsA[key] + ratingsB[key];
+  return result;
 }
 
 function subRatings(a, b) {
-  const aa = normalizeRatings(a);
-  const bb = normalizeRatings(b);
-  const out = {};
-  for (const k of RATING_KEYS) out[k] = aa[k] - bb[k];
-  return out;
+  const ratingsA = normalizeRatings(a);
+  const ratingsB = normalizeRatings(b);
+  const result = {};
+  for (const key of RATING_KEYS) result[key] = ratingsA[key] - ratingsB[key];
+  return result;
 }
 
 function computeAverages(count, sums) {
-  const c = toFiniteNumber(count, 0);
-  const s = normalizeRatings(sums);
+  const totalCount = toFiniteNumber(count, 0);
+  const normalizedSums = normalizeRatings(sums);
   const averages = {};
-  for (const k of RATING_KEYS) averages[k] = c > 0 ? s[k] / c : null;
+  for (const key of RATING_KEYS) averages[key] = totalCount > 0 ? normalizedSums[key] / totalCount : null;
   return averages;
 }
 
@@ -54,10 +54,10 @@ function computeAveragesFromStats(statsDoc) {
 
 // Throws rather than clamping so aggregate bugs surface immediately.
 function assertSumsNonNegative({ cityId, sums, epsilon = 1e-6 }) {
-  for (const k of RATING_KEYS) {
-    const v = toFiniteNumber(sums?.[k], 0);
-    if (v < -epsilon)
-      throw new Error(`city_stats sums went negative for ${cityId}.${k} (${v})`);
+  for (const key of RATING_KEYS) {
+    const sumValue = toFiniteNumber(sums?.[key], 0);
+    if (sumValue < -epsilon)
+      throw new Error(`city_stats sums went negative for ${cityId}.${key} (${sumValue})`);
   }
 }
 
@@ -70,14 +70,14 @@ function assertSumsNonNegative({ cityId, sums, epsilon = 1e-6 }) {
  *   15%  rent affordability  (medianRent vs $3500 ceiling → 0–100)
  */
 function computeLivabilityV0({ averages, metrics }) {
-  const overall10 = toFiniteNumber(averages?.overall, NaN);
-  const reviewScore = Number.isFinite(overall10)
-    ? clamp0to100(Math.round((overall10 / 10) * 100))
+  const overallRating = toFiniteNumber(averages?.overall, NaN);
+  const reviewScore = Number.isFinite(overallRating)
+    ? clamp0to100(Math.round((overallRating / 10) * 100))
     : null;
 
-  const safetyRaw = toFiniteNumber(metrics?.safetyScore, NaN);
-  const safetyScore = Number.isFinite(safetyRaw)
-    ? clamp0to100(Math.round(safetyRaw * 10))
+  const rawSafetyScore = toFiniteNumber(metrics?.safetyScore, NaN);
+  const safetyScore = Number.isFinite(rawSafetyScore)
+    ? clamp0to100(Math.round(rawSafetyScore * 10))
     : null;
 
   const rentScore = medianRentToAffordability100(metrics?.medianRent);
@@ -86,25 +86,25 @@ function computeLivabilityV0({ averages, metrics }) {
     { score: reviewScore, weight: 0.5  },
     { score: safetyScore, weight: 0.35 },
     { score: rentScore,   weight: 0.15 },
-  ].filter((s) => s.score != null);
+  ].filter((signal) => signal.score != null);
 
   if (signals.length === 0) return { version: "v0", score: null };
 
-  const totalWeight = signals.reduce((sum, s) => sum + s.weight, 0);
+  const totalWeight = signals.reduce((sum, signal) => sum + signal.weight, 0);
   const score = Math.round(
-    signals.reduce((sum, s) => sum + s.score * (s.weight / totalWeight), 0),
+    signals.reduce((sum, signal) => sum + signal.score * (signal.weight / totalWeight), 0),
   );
 
   return { version: "v0", score };
 }
 
 function normalizeFlatCityMetrics(cityId, metricsDoc) {
-  const src = isPlainObject(metricsDoc) ? metricsDoc : {};
+  const safeDoc = isPlainObject(metricsDoc) ? metricsDoc : {};
   return {
     cityId,
-    medianRent:  Number.isFinite(Number(src.medianRent))  ? Number(src.medianRent)  : null,
-    population:  Number.isFinite(Number(src.population))  ? Number(src.population)  : null,
-    safetyScore: normalizeSafetyTo10(src.safetyScore),
+    medianRent:  Number.isFinite(Number(safeDoc.medianRent))  ? Number(safeDoc.medianRent)  : null,
+    population:  Number.isFinite(Number(safeDoc.population))  ? Number(safeDoc.population)  : null,
+    safetyScore: normalizeSafetyTo10(safeDoc.safetyScore),
   };
 }
 
@@ -118,9 +118,9 @@ async function applyCityStatsDelta(cityId, { deltaCount, deltaRatings }) {
       tx.get(metricsRef),
     ]);
 
-    const prev = statsSnap.exists ? statsSnap.data() || {} : {};
-    const nextCount = clampNonNegative(toFiniteNumber(prev.count, 0) + toFiniteNumber(deltaCount, 0));
-    const nextSums = addRatings(normalizeRatings(prev.sums), normalizeRatings(deltaRatings));
+    const prevStats = statsSnap.exists ? statsSnap.data() || {} : {};
+    const nextCount = clampNonNegative(toFiniteNumber(prevStats.count, 0) + toFiniteNumber(deltaCount, 0));
+    const nextSums = addRatings(normalizeRatings(prevStats.sums), normalizeRatings(deltaRatings));
 
     assertSumsNonNegative({ cityId, sums: nextSums });
 

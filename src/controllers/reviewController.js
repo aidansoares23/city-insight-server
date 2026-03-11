@@ -96,7 +96,7 @@ async function listReviewsForCity(req, res, next) {
       cursor,
     });
 
-    const reviews = docs.map((d) => toPublicReview(d.id, d.data()));
+    const reviews = docs.map((doc) => toPublicReview(doc.id, doc.data()));
     const nextCursor = docs.length
       ? buildNextCursorFromDoc(docs[docs.length - 1])
       : null;
@@ -112,17 +112,17 @@ async function getReviewByIdForCity(req, res, next) {
     const cityId = String(req.params.slug).trim().toLowerCase();
     const reviewId = String(req.params.reviewId).trim();
 
-    const found = await reviewService.getReviewByIdForCity({
+    const reviewDoc = await reviewService.getReviewByIdForCity({
       cityId,
       reviewId,
     });
-    if (!found) {
+    if (!reviewDoc) {
       return res.status(404).json({
         error: { code: "NOT_FOUND", message: "Review not found for this city" },
       });
     }
 
-    return res.json({ review: toPublicReview(found.id, found.data) });
+    return res.json({ review: toPublicReview(reviewDoc.id, reviewDoc.data) });
   } catch (err) {
     next(err);
   }

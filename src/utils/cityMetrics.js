@@ -15,13 +15,13 @@ const OWNERS = {
 };
 
 function pickOwnedFields(patch, allowedSet) {
-  const out = {};
+  const ownedFields = {};
   for (const key of allowedSet) {
-    if (Object.prototype.hasOwnProperty.call(patch, key)) out[key] = patch[key];
+    if (Object.prototype.hasOwnProperty.call(patch, key)) ownedFields[key] = patch[key];
   }
   // meta is passed through and namespaced separately during the write
-  if (Object.prototype.hasOwnProperty.call(patch, "meta")) out.meta = patch.meta;
-  return out;
+  if (Object.prototype.hasOwnProperty.call(patch, "meta")) ownedFields.meta = patch.meta;
+  return ownedFields;
 }
 
 
@@ -72,7 +72,7 @@ async function upsertCityMetrics(cityId, patch, options = {}) {
   }
 
   if (owner && Object.keys(newValues).length > 0) {
-    const changed = Object.keys(newValues).some((k) => newValues[k] !== prevValues[k]);
+    const changed = Object.keys(newValues).some((key) => newValues[key] !== prevValues[key]);
     await ref.collection("snapshots").add({
       pipeline: owner,
       syncedAt: new Date().toISOString(),
@@ -100,16 +100,16 @@ async function getCityMetrics(cityId) {
     };
   }
 
-  const d = snap.data() || {};
-  const medianRent = toNumOrNull(d.medianRent);
+  const metricsData = snap.data() || {};
+  const medianRent = toNumOrNull(metricsData.medianRent);
   return {
     cityId,
     medianRent,
     costScore:        medianRentToAffordability10(medianRent),
-    population:       toNumOrNull(d.population),
-    safetyScore:      normalizeSafetyTo10(d.safetyScore),
-    crimeIndexPer100k: toNumOrNull(d.crimeIndexPer100k),
-    meta:             isPlainObject(d.meta) ? d.meta : null,
+    population:       toNumOrNull(metricsData.population),
+    safetyScore:      normalizeSafetyTo10(metricsData.safetyScore),
+    crimeIndexPer100k: toNumOrNull(metricsData.crimeIndexPer100k),
+    meta:             isPlainObject(metricsData.meta) ? metricsData.meta : null,
   };
 }
 

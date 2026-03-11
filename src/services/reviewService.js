@@ -13,6 +13,20 @@ const {
 const { makeReviewId } = require("../lib/reviews");
 const { AppError } = require("../lib/errors");
 
+/*
+ * Atomically create or update a review and recompute city_stats + livability
+ * in a single Firestore transaction. The review document ID is deterministic
+ * (SHA-256 of userId:cityId:salt), so submitting again is always an upsert.
+ *
+ * Transaction reads (all must precede any writes per Firestore rules):
+ *   1. cities/{cityId}        — existence check
+ *   2. reviews/{reviewId}     — detect create vs. update, fetch previous ratings
+ *   3. city_stats/{cityId}    — current aggregate sums
+ *   4. city_metrics/{cityId}  — safety/rent signals for livability formula
+ *
+ * Then computes the rating delta, applies it to the running sums, recalculates
+ * livability, and writes the review + stats docs in the same transaction.
+ */
 async function upsertMyReviewForCity({
   cityId,
   userId,
@@ -28,6 +42,7 @@ async function upsertMyReviewForCity({
   const metricsRef = db.collection("city_metrics").doc(cityId);
 
   const txResult = await db.runTransaction(async (tx) => {
+    // 1. City must exist before accepting a review.
     const citySnap = await tx.get(cityRef);
     if (!citySnap.exists) {
       throw new AppError("City not found", {
@@ -36,11 +51,13 @@ async function upsertMyReviewForCity({
       });
     }
 
+    // 2. Determine create vs. update and snapshot previous ratings for delta math.
     const reviewSnap = await tx.get(reviewRef);
     const isNew = !reviewSnap.exists;
     const prevData = reviewSnap.exists ? reviewSnap.data() || {} : {};
     const prevRatings = normalizeRatings(prevData.ratings);
 
+    // 3 & 4. Fetch aggregate state and metrics in parallel (still within the tx).
     const [statsSnap, metricsSnap] = await Promise.all([
       tx.get(statsRef),
       tx.get(metricsRef),
@@ -50,6 +67,7 @@ async function upsertMyReviewForCity({
     const prevCount = Number(prevStats.count ?? 0);
     const prevSums = normalizeRatings(prevStats.sums);
 
+    // On create: delta = full new ratings. On update: delta = new − old.
     const normalizedRatings = normalizeRatings(ratings);
     const deltaCount = isNew ? 1 : 0;
     const deltaRatings = isNew
@@ -119,6 +137,8 @@ async function getMyReviewForCity({ cityId, userId }) {
     : { reviewId, review: null };
 }
 
+// Same atomicity guarantee as upsert: subtract the deleted review's ratings
+// from the running sums and recompute livability in one transaction.
 async function deleteMyReviewForCity({ cityId, userId }) {
   const reviewId = makeReviewId(String(userId).trim(), cityId);
 
