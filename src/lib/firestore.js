@@ -1,4 +1,3 @@
-// src/lib/firestore.js
 const { admin } = require("../config/firebase");
 
 function tsToIso(ts) {

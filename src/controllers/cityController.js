@@ -1,4 +1,3 @@
-// src/controllers/cityController.js
 const { withIsoTimestamps } = require("../lib/firestore");
 const cityService = require("../services/cityService");
 

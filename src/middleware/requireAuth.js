@@ -1,4 +1,3 @@
-// src/middleware/requireAuth.js
 const jwt = require("jsonwebtoken");
 const { NODE_ENV, DEV_AUTH_BYPASS } = require("../config/env");
 
@@ -22,18 +21,9 @@ function isStateChangingMethod(req) {
   return m === "POST" || m === "PUT" || m === "PATCH" || m === "DELETE";
 }
 
-/**
- * CSRF-lite:
- * Require a custom header for state-changing requests.
- * This blocks "drive-by" cross-site form submits because browsers can't set custom headers in HTML forms.
- */
+// Blocks cross-site form submits — browsers can't set custom headers in HTML forms.
 function enforceCsrfLite(req, res) {
-  // Only for state-changing routes
   if (!isStateChangingMethod(req)) return true;
-
-  // If you ever add webhooks or server-to-server calls, you can exempt them here.
-  // Example:
-  // if (req.path.startsWith("/webhooks/")) return true;
 
   const xrw = req.get("x-requested-with");
   if (xrw !== "XMLHttpRequest") {
@@ -51,7 +41,6 @@ async function requireAuth(req, res, next) {
     const bypassEnabled =
       !isProd && String(DEV_AUTH_BYPASS).toLowerCase() === "true";
 
-    // Dev bypass (localhost only)
     if (bypassEnabled) {
       if (!isLocalDevRequest(req)) {
         return res.status(401).json({
@@ -72,14 +61,10 @@ async function requireAuth(req, res, next) {
         });
       }
 
-      // Optional: enforce CSRF-lite even in bypass mode (usually unnecessary)
-      // if (!enforceCsrfLite(req, res)) return;
-
       req.user = { sub: devUser, isDevBypass: true };
       return next();
     }
 
-    // Require server secret
     if (!process.env.SESSION_JWT_SECRET) {
       return res.status(500).json({
         error: {
@@ -89,10 +74,8 @@ async function requireAuth(req, res, next) {
       });
     }
 
-    // CSRF-lite first (before doing work), but only after we know we're not in bypass
     if (!enforceCsrfLite(req, res)) return;
 
-    // Cookie session
     const token = req.cookies?.ci_session;
     if (!token) {
       return res.status(401).json({

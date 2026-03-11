@@ -1,4 +1,3 @@
-// src/lib/reviews.js
 const crypto = require("crypto");
 const { isPlainObject } = require("./objects");
 

@@ -1,11 +1,9 @@
-// src/app.js
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const { NODE_ENV } = require("./config/env");
 
-// Route modules
 const cityRoutes = require("./routes/cityRoutes");
 const meRoutes = require("./routes/meRoutes");
 const authRoutes = require("./routes/authRoutes");
@@ -16,7 +14,6 @@ const { apiLimiter, authLimiter } = require("./middleware/rateLimiter");
 const app = express();
 
 if (NODE_ENV === "production") {
-  // Only trust proxy headers in environments where a trusted proxy is expected.
   app.set("trust proxy", 1);
 }
 
@@ -24,7 +21,6 @@ app.use(helmet());
 app.use(express.json());
 app.use(cookieParser());
 
-// CORS allowlist
 const allowlist = (process.env.CLIENT_ORIGINS || "http://localhost:5173")
   .split(",")
   .map((s) => s.trim())
@@ -33,7 +29,7 @@ const allowlist = (process.env.CLIENT_ORIGINS || "http://localhost:5173")
 app.use(
   cors({
     origin(origin, cb) {
-      if (!origin) return cb(null, true); // curl / server-to-server
+      if (!origin) return cb(null, true);
       if (allowlist.includes(origin)) return cb(null, true);
       return cb(new Error("CORS_NOT_ALLOWED"));
     },
@@ -59,11 +55,9 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Rate limiting
 app.use("/api/", apiLimiter);
 app.use("/api/auth/login", authLimiter);
 
-// Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/cities", cityRoutes);
 app.use("/api/me", meRoutes);

@@ -82,15 +82,15 @@ setMock("src/services/cityService.js", {
 });
 
 setMock("src/services/reviewService.js", {
-  async upsertMyReviewForCity({ cityId, userId, incomingRatings, incomingComment }) {
+  async upsertMyReviewForCity({ cityId, userId, ratings, comment }) {
     return {
       created: true,
       reviewId: "review-123",
       review: {
         cityId,
         userId,
-        ratings: incomingRatings,
-        comment: incomingComment,
+        ratings,
+        comment,
         createdAt: fixedTs(),
         updatedAt: fixedTs(),
       },

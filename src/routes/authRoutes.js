@@ -1,4 +1,3 @@
-// src/routes/authRoutes.js
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const { OAuth2Client } = require("google-auth-library");
@@ -11,10 +10,10 @@ function cookieOptions() {
   const isProd = NODE_ENV === "production";
   return {
     httpOnly: true,
-    secure: isProd, // true on Render HTTPS
-    sameSite: isProd ? "none" : "lax", // Vercel->Render is cross-site in prod
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
     path: "/",
-    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+    maxAge: 1000 * 60 * 60 * 24 * 7,
   };
 }
 
@@ -87,7 +86,6 @@ router.post("/login", requireCsrfLite, async (req, res, next) => {
 });
 
 router.post("/logout", requireCsrfLite, (_req, res) => {
-  // Clear cookie (same options matter)
   res.clearCookie("ci_session", { ...cookieOptions(), maxAge: 0 });
   return res.json({ ok: true });
 });

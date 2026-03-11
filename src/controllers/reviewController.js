@@ -1,4 +1,3 @@
-// src/controllers/reviewController.js
 const {
   withIsoTimestamps,
   buildNextCursorFromDoc,
@@ -28,7 +27,7 @@ function toMyReview(docId, data) {
   return withIsoTimestamps({
     id: docId,
     cityId: data.cityId,
-    userId: data.userId, // keep for now
+    userId: data.userId,
     ratings: data.ratings,
     comment: data.comment ?? null,
     isEdited: data.isEdited ?? false,
@@ -59,14 +58,14 @@ async function createOrUpdateReviewForCity(req, res, next) {
       });
     }
 
-    const incomingRatings = normalizeIncomingRatings(req.body.ratings);
-    const incomingComment = normalizeIncomingComment(req.body.comment);
+    const ratings = normalizeIncomingRatings(req.body.ratings);
+    const comment = normalizeIncomingComment(req.body.comment);
 
     const result = await reviewService.upsertMyReviewForCity({
       cityId,
       userId,
-      incomingRatings,
-      incomingComment,
+      ratings,
+      comment,
     });
 
     return res.status(result.created ? 201 : 200).json({

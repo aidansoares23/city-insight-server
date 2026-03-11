@@ -1,4 +1,3 @@
-// src/middleware/errorHandlers.js
 function notFoundHandler(req, res, next) {
   res.status(404).json({
     error: {
@@ -8,13 +7,6 @@ function notFoundHandler(req, res, next) {
   });
 }
 
-/**
- * Central error handler.
- * Supports:
- *  - err.status (number): HTTP status override
- *  - err.code (string): stable error code for clients
- *  - err.details (object): optional extra info (validation errors, etc.)
- */
 function errorHandler(err, req, res, next) {
   const status = Number.isFinite(Number(err?.status)) ? Number(err.status) : 500;
 
@@ -32,7 +24,6 @@ function errorHandler(err, req, res, next) {
       ? "Internal server error"
       : "Request failed";
 
-  // Log full error server-side, but don't leak internals to client
   console.error("ERROR:", {
     status,
     code,

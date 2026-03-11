@@ -1,6 +1,5 @@
-// src/services/reviewService.js
 const { db, admin } = require("../config/firebase");
-const { serverTimestamps, updatedTimestamp } = require("../utils/timestamps");
+const { updatedTimestamp } = require("../utils/timestamps");
 const {
   normalizeRatings,
   addRatings,
@@ -14,17 +13,14 @@ const {
 const { makeReviewId } = require("../lib/reviews");
 const { AppError } = require("../lib/errors");
 
-/**
- * Transaction: create/update "my review" + update city_stats (count/sums/livability)
- */
 async function upsertMyReviewForCity({
   cityId,
   userId,
-  incomingRatings,
-  incomingComment,
+  ratings,
+  comment,
 }) {
-  const cleanUserId = String(userId).trim();
-  const reviewId = makeReviewId(cleanUserId, cityId);
+  const uid = String(userId).trim();
+  const reviewId = makeReviewId(uid, cityId);
 
   const cityRef = db.collection("cities").doc(cityId);
   const reviewRef = db.collection("reviews").doc(reviewId);
@@ -54,7 +50,7 @@ async function upsertMyReviewForCity({
     const prevCount = Number(prevStats.count ?? 0);
     const prevSums = normalizeRatings(prevStats.sums);
 
-    const normalizedRatings = normalizeRatings(incomingRatings);
+    const normalizedRatings = normalizeRatings(ratings);
     const deltaCount = isNew ? 1 : 0;
     const deltaRatings = isNew
       ? normalizedRatings
@@ -73,10 +69,10 @@ async function upsertMyReviewForCity({
     const now = admin.firestore.Timestamp.now();
 
     const reviewPatch = {
-      userId: cleanUserId,
+      userId: uid,
       cityId,
       ratings: normalizedRatings,
-      comment: incomingComment,
+      comment,
       ...(isNew
         ? { createdAt: now, updatedAt: now, isEdited: false }
         : { updatedAt: now, isEdited: true }),
@@ -96,10 +92,10 @@ async function upsertMyReviewForCity({
     // Build response data with a local timestamp to avoid a post-transaction read.
     // createdAt is preserved from the existing doc on updates.
     const reviewData = {
-      userId: cleanUserId,
+      userId: uid,
       cityId,
       ratings: normalizedRatings,
-      comment: incomingComment,
+      comment,
       createdAt: isNew ? now : (prevData.createdAt ?? now),
       updatedAt: now,
       isEdited: !isNew,

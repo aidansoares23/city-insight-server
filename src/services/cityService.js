@@ -1,4 +1,3 @@
-// src/services/cityService.js
 const { db, admin } = require("../config/firebase");
 const { computeAveragesFromStats } = require("../utils/cityStats");
 const { getCityMetrics } = require("../utils/cityMetrics");
@@ -6,7 +5,7 @@ const { tsToIso, buildNextCursorFromDoc } = require("../lib/firestore");
 const { toNumOrNull } = require("../lib/numbers");
 const { AppError } = require("../lib/errors");
 
-function normalizeCityIdFromParam(param) {
+function normalizeId(param) {
   return String(param ?? "")
     .trim()
     .toLowerCase();
@@ -35,14 +34,13 @@ async function listCities({ limit, q, sort } = {}) {
   const safeLimit = Number.isFinite(parsedLimit)
     ? Math.max(1, Math.min(parsedLimit, 100))
     : 50;
-  const queryQ = String(q || "")
+  const search = String(q || "")
     .trim()
     .toLowerCase();
   const sortKey = String(sort || "name_asc")
     .trim()
     .toLowerCase();
 
-  // 1) Base city docs
   const snap = await db
     .collection("cities")
     .orderBy("name", "asc")
@@ -60,7 +58,6 @@ async function listCities({ limit, q, sort } = {}) {
     };
   });
 
-  // 2) Batch fetch stats + metrics
   const statsRefs = baseCities.map((c) =>
     db.collection("city_stats").doc(c.id),
   );
@@ -73,7 +70,6 @@ async function listCities({ limit, q, sort } = {}) {
     metricsRefs.length ? db.getAll(...metricsRefs) : Promise.resolve([]),
   ]);
 
-  // 3) Card projection
   let cities = baseCities.map((c, idx) => {
     const statsDoc = statsSnaps[idx]?.exists
       ? statsSnaps[idx].data() || {}
@@ -103,16 +99,14 @@ async function listCities({ limit, q, sort } = {}) {
     };
   });
 
-  // 4) Optional search
-  if (queryQ) {
+  if (search) {
     cities = cities.filter((c) => {
       const hay =
         `${c.name || ""} ${c.state || ""} ${c.slug || ""}`.toLowerCase();
-      return hay.includes(queryQ);
+      return hay.includes(search);
     });
   }
 
-  // 5) Optional sort
   switch (sortKey) {
     case "livability_desc":
       cities.sort((a, b) =>
@@ -143,12 +137,12 @@ async function listCities({ limit, q, sort } = {}) {
 
   return {
     cities,
-    meta: { limit: safeLimit, q: queryQ || null, sort: sortKey },
+    meta: { limit: safeLimit, q: search || null, sort: sortKey },
   };
 }
 
 async function getCityBySlug(slug) {
-  const cityId = normalizeCityIdFromParam(slug);
+  const cityId = normalizeId(slug);
   const snap = await db.collection("cities").doc(cityId).get();
   if (!snap.exists) {
     throw new AppError("City not found", { status: 404, code: "NOT_FOUND" });
@@ -157,15 +151,13 @@ async function getCityBySlug(slug) {
 }
 
 async function getCityDetails(slug) {
-  const cityId = normalizeCityIdFromParam(slug);
+  const cityId = normalizeId(slug);
 
-  // City
   const citySnap = await db.collection("cities").doc(cityId).get();
   if (!citySnap.exists) {
     throw new AppError("City not found", { status: 404, code: "NOT_FOUND" });
   }
 
-  // Fetch stats, metrics, and reviews preview in parallel — all independent of each other.
   const pageSize = 10;
   const [statsSnap, metrics, reviewsSnap] = await Promise.all([
     db.collection("city_stats").doc(cityId).get(),

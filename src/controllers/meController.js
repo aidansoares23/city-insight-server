@@ -1,4 +1,3 @@
-// src/controllers/meController.js
 const meService = require("../services/meService");
 
 async function getMe(req, res, next) {
