@@ -1,5 +1,3 @@
-// src/lib/slugs.js
-
 /**
  * Convert Census "NAME" field into your slug format: "<city>-ca"
  * Example: "San Luis Obispo city, California" -> "san-luis-obispo-ca"

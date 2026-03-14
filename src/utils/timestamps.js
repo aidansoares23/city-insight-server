@@ -1,4 +1,3 @@
-// src/utils/timestamps.js
 const { admin } = require("../config/firebase");
 
 function serverTimestamps() {

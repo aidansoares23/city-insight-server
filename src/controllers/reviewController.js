@@ -11,7 +11,7 @@ const {
 
 const reviewService = require("../services/reviewService");
 
-function toPublicReview(docId, data) {
+function toReview(docId, data) {
   return withIsoTimestamps({
     id: docId,
     cityId: data.cityId,
@@ -24,28 +24,13 @@ function toPublicReview(docId, data) {
 }
 
 function toMyReview(docId, data) {
-  return withIsoTimestamps({
-    id: docId,
-    cityId: data.cityId,
-    userId: data.userId,
-    ratings: data.ratings,
-    comment: data.comment ?? null,
-    isEdited: data.isEdited ?? false,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
-  });
+  return { ...toReview(docId, data), userId: data.userId };
 }
 
 async function createOrUpdateReviewForCity(req, res, next) {
   try {
     const cityId = String(req.params.slug).trim().toLowerCase();
-
-    const userId = req.user?.sub;
-    if (!userId) {
-      return res.status(401).json({
-        error: { code: "UNAUTHENTICATED", message: "Missing or invalid auth" },
-      });
-    }
+    const userId = req.user.sub;
 
     const { ok, errors } = validateReviewBody(req.body);
     if (!ok) {
@@ -96,7 +81,7 @@ async function listReviewsForCity(req, res, next) {
       cursor,
     });
 
-    const reviews = docs.map((doc) => toPublicReview(doc.id, doc.data()));
+    const reviews = docs.map((doc) => toReview(doc.id, doc.data()));
     const nextCursor = docs.length
       ? buildNextCursorFromDoc(docs[docs.length - 1])
       : null;
@@ -122,7 +107,7 @@ async function getReviewByIdForCity(req, res, next) {
       });
     }
 
-    return res.json({ review: toPublicReview(reviewDoc.id, reviewDoc.data) });
+    return res.json({ review: toReview(reviewDoc.id, reviewDoc.data) });
   } catch (err) {
     next(err);
   }
@@ -131,13 +116,7 @@ async function getReviewByIdForCity(req, res, next) {
 async function getMyReviewForCity(req, res, next) {
   try {
     const cityId = String(req.params.slug).trim().toLowerCase();
-
-    const userId = req.user?.sub;
-    if (!userId) {
-      return res.status(401).json({
-        error: { code: "UNAUTHENTICATED", message: "Missing or invalid auth" },
-      });
-    }
+    const userId = req.user.sub;
 
     const { reviewId, review } = await reviewService.getMyReviewForCity({
       cityId,
@@ -154,13 +133,7 @@ async function getMyReviewForCity(req, res, next) {
 async function deleteMyReviewForCity(req, res, next) {
   try {
     const cityId = String(req.params.slug).trim().toLowerCase();
-
-    const userId = req.user?.sub;
-    if (!userId) {
-      return res.status(401).json({
-        error: { code: "UNAUTHENTICATED", message: "Missing or invalid auth" },
-      });
-    }
+    const userId = req.user.sub;
 
     await reviewService.deleteMyReviewForCity({ cityId, userId });
     return res.json({ ok: true, deleted: true });

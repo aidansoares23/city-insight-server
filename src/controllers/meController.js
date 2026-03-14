@@ -14,7 +14,7 @@ async function getMe(req, res, next) {
 
 async function listMyReviews(req, res, next) {
   try {
-    const userId = req.user?.sub;
+    const userId = req.user.sub;
     const limit = Math.min(Number(req.query.limit ?? 50), 100);
     const reviews = await meService.listMyReviews({ userId, limit });
     res.json({ reviews });
@@ -25,7 +25,7 @@ async function listMyReviews(req, res, next) {
 
 async function deleteAccount(req, res, next) {
   try {
-    const userId = req.user?.sub;
+    const userId = req.user.sub;
     await meService.deleteAccount({ userId });
     res.json({ ok: true, deleted: true });
   } catch (err) {

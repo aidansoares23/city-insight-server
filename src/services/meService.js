@@ -59,11 +59,12 @@ async function deleteAccount({ userId }) {
   const uid = String(userId || "").trim();
   if (!uid) throw new AppError("Missing user identity", { status: 401, code: "UNAUTHENTICATED" });
 
-  const reviews = await listMyReviews({ userId: uid, limit: 100 });
+  const snap = await db.collection("reviews").where("userId", "==", uid).get();
 
-  for (const review of reviews) {
-    if (review.cityId) {
-      await deleteMyReviewForCity({ cityId: review.cityId, userId: uid });
+  for (const doc of snap.docs) {
+    const cityId = doc.data()?.cityId;
+    if (cityId) {
+      await deleteMyReviewForCity({ cityId, userId: uid });
     }
   }
 

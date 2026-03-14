@@ -1,4 +1,3 @@
-// src/config/env.js
 function parseBool(val) {
   return String(val || "").trim().toLowerCase() === "true";
 }

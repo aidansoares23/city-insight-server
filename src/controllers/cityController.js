@@ -16,9 +16,9 @@ async function listCities(req, res, next) {
 
 async function getCityBySlug(req, res, next) {
   try {
-    const found = await cityService.getCityBySlug(req.params.slug);
+    const cityDoc = await cityService.getCityBySlug(req.params.slug);
     return res.json({
-      city: withIsoTimestamps({ id: found.id, ...found.data }),
+      city: withIsoTimestamps({ id: cityDoc.id, ...cityDoc.data }),
     });
   } catch (err) {
     next(err);

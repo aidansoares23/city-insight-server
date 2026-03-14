@@ -1,5 +1,3 @@
-// src/lib/numbers.js
-
 function toNumOrNull(value) {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;

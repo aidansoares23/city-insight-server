@@ -14,6 +14,13 @@ const OWNERS = {
   safetySync:  new Set(["safetyScore", "crimeIndexPer100k"]),
 };
 
+const METRIC_FIELDS = [
+  { key: "medianRent",         normalize: toNumOrNull },
+  { key: "population",         normalize: toNumOrNull },
+  { key: "safetyScore",        normalize: normalizeSafetyTo10 },
+  { key: "crimeIndexPer100k",  normalize: toNumOrNull },
+];
+
 function pickOwnedFields(patch, allowedSet) {
   const ownedFields = {};
   for (const key of allowedSet) {
@@ -43,11 +50,13 @@ async function upsertCityMetrics(cityId, patch, options = {}) {
   const prevValues = {};
   const newValues = {};
 
-  function tryAddField(key, newVal, prevVal) {
-    if (!Object.prototype.hasOwnProperty.call(ownedOnly, key)) return;
+  for (const { key, normalize } of METRIC_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(ownedOnly, key)) continue;
+    const newVal = normalize(ownedOnly[key]);
+    const prevVal = owner ? normalize(prevData[key]) : null;
     if (owner && newVal === null && prevVal !== null) {
       console.warn(`[metrics] null-guard: skipping ${key} for ${cityId} (new=null, keeping existing=${prevVal})`);
-      return;
+      continue;
     }
     docPatch[key] = newVal;
     if (owner) {
@@ -55,11 +64,6 @@ async function upsertCityMetrics(cityId, patch, options = {}) {
       newValues[key] = newVal;
     }
   }
-
-  tryAddField("medianRent",       toNumOrNull(ownedOnly.medianRent),           toNumOrNull(prevData.medianRent));
-  tryAddField("population",       toNumOrNull(ownedOnly.population),           toNumOrNull(prevData.population));
-  tryAddField("safetyScore",      normalizeSafetyTo10(ownedOnly.safetyScore),  normalizeSafetyTo10(prevData.safetyScore));
-  tryAddField("crimeIndexPer100k", toNumOrNull(ownedOnly.crimeIndexPer100k),   toNumOrNull(prevData.crimeIndexPer100k));
 
   await ref.set(docPatch, { merge: true });
 

@@ -177,7 +177,7 @@ async function deleteMyReviewForCity({ cityId, userId }) {
     const prevSums = normalizeRatings(prevStats.sums);
 
     const nextCount = Math.max(0, prevCount - 1);
-    const nextSums = addRatings(prevSums, subRatings({}, oldRatings));
+    const nextSums = subRatings(prevSums, oldRatings);
 
     assertSumsNonNegative({ cityId, sums: nextSums });
 
