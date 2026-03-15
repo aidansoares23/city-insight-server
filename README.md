@@ -68,6 +68,21 @@ DEV_AUTH_BYPASS=false
 
 ---
 
+## Environment Variables
+
+| Variable                       | Required      | Description                                                                 |
+| ------------------------------ | ------------- | --------------------------------------------------------------------------- |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | Yes           | Absolute path to your Firebase service account JSON key                     |
+| `SESSION_JWT_SECRET`           | Yes           | Secret used to sign session JWTs. Generate with `openssl rand -hex 32`      |
+| `REVIEW_ID_SALT`               | Yes           | Salt for deterministic review ID generation. **Never change after launch.** |
+| `GOOGLE_CLIENT_ID`             | Yes           | OAuth 2.0 client ID from Google Cloud Console                               |
+| `PORT`                         | No (def 3000) | Port the server listens on                                                  |
+| `NODE_ENV`                     | No (def dev)  | `development` or `production`                                               |
+| `CLIENT_ORIGINS`               | No            | Comma-separated allowed CORS origins (def `http://localhost:5173`)          |
+| `DEV_AUTH_BYPASS`              | No            | `true` to skip Google auth locally. Localhost-only; hard-blocked in prod    |
+
+---
+
 ## Running the Server
 
 ```bash
