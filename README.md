@@ -145,7 +145,16 @@ Authenticated routes require a valid `ci_session` cookie (set automatically on l
 }
 ```
 
-Common codes: `NOT_FOUND`, `UNAUTHENTICATED`, `VALIDATION_ERROR`, `CSRF`, `CORS`, `INTERNAL`.
+Common codes: `NOT_FOUND`, `UNAUTHENTICATED`, `VALIDATION_ERROR`, `CSRF`, `CORS`, `RATE_LIMITED`, `INTERNAL`.
+
+**Rate limits:**
+
+| Scope         | Limit              | Response           |
+| ------------- | ------------------ | ------------------ |
+| General API   | 300 req / 15 min per IP | `429 RATE_LIMITED` |
+| Auth endpoints (`/api/auth/*`) | 20 req / 15 min per IP | `429 RATE_LIMITED` |
+
+Rate-limited responses include a `Retry-After` header (seconds). The client should back off and retry after that interval.
 
 **For contributors — how errors propagate:**
 
@@ -252,10 +261,19 @@ GET /api/cities/portland-or/reviews?pageSize=10&cursorId=abc123&cursorCreatedAt=
 
 ### Me — `/api/me`
 
-| Method | Path              | Auth     | Description                 |
-| ------ | ----------------- | -------- | --------------------------- |
-| `GET`  | `/api/me`         | Required | Current user profile        |
-| `GET`  | `/api/me/reviews` | Required | All reviews by current user |
+| Method   | Path              | Auth     | Description                                  |
+| -------- | ----------------- | -------- | -------------------------------------------- |
+| `GET`    | `/api/me`         | Required | Current user profile                         |
+| `GET`    | `/api/me/reviews` | Required | All reviews by current user                  |
+| `DELETE` | `/api/me`         | Required | Permanently delete account and all reviews   |
+
+**`GET /api/me/reviews` query params:**
+
+| Param   | Default | Description                     |
+| ------- | ------- | ------------------------------- |
+| `limit` | `50`    | Max results to return (1–100)   |
+
+**`DELETE /api/me`** has no body and returns `{ ok: true }` on success. All of the user's reviews are deleted atomically and city stats are recomputed. This action is irreversible.
 
 ---
 
