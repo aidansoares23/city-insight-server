@@ -11,10 +11,10 @@ function setMock(relPath, exports) {
   require.cache[resolved] = { id: resolved, filename: resolved, loaded: true, exports };
 }
 
-function loadRequireAuth({ NODE_ENV = "development", DEV_AUTH_BYPASS = false } = {}) {
+function loadRequireAuth({ NODE_ENV = "development", DEV_AUTH_BYPASS = false, SESSION_JWT_SECRET = TEST_SECRET } = {}) {
   const p = require.resolve("../src/middleware/requireAuth");
   delete require.cache[p];
-  setMock("src/config/env", { NODE_ENV, DEV_AUTH_BYPASS, GOOGLE_CLIENT_ID: "" });
+  setMock("src/config/env", { NODE_ENV, DEV_AUTH_BYPASS, GOOGLE_CLIENT_ID: "", SESSION_JWT_SECRET });
   return require("../src/middleware/requireAuth").requireAuth;
 }
 
@@ -100,20 +100,11 @@ describe("requireAuth — dev bypass", () => {
 describe("requireAuth — JWT mode", () => {
   let requireAuth;
   before(() => {
-    process.env.SESSION_JWT_SECRET = TEST_SECRET;
     requireAuth = loadRequireAuth({ NODE_ENV: "production", DEV_AUTH_BYPASS: false });
   });
 
-  it("missing SESSION_JWT_SECRET → 500", async () => {
-    const saved = process.env.SESSION_JWT_SECRET;
-    delete process.env.SESSION_JWT_SECRET;
-    const req = fakeReq();
-    const res = fakeRes();
-    await requireAuth(req, res, () => {});
-    process.env.SESSION_JWT_SECRET = saved;
-    assert.equal(res._status, 500);
-    assert.equal(res._body.error.code, "SERVER_MISCONFIG");
-  });
+  // SESSION_JWT_SECRET validation moved to env.js startup (throws in production if missing).
+  // requireAuth reads it as an imported constant, so missing-secret is a deploy-time error, not runtime.
 
   it("POST without X-Requested-With → 403 CSRF", async () => {
     const req = fakeReq({ method: "POST" });
@@ -224,7 +215,6 @@ describe("requireAuth — JWT mode", () => {
 
 describe("requireAuth — bypass disabled in production", () => {
   it("NODE_ENV=production ignores DEV_AUTH_BYPASS", async () => {
-    process.env.SESSION_JWT_SECRET = TEST_SECRET;
     const requireAuth = loadRequireAuth({ NODE_ENV: "production", DEV_AUTH_BYPASS: false });
     const req = fakeReq({ method: "GET", headers: { "x-dev-user": "hacker" } });
     const res = fakeRes();
