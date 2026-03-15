@@ -11,6 +11,14 @@ if (!GOOGLE_CLIENT_ID) {
   console.warn("GOOGLE_CLIENT_ID is not set. Google auth will fail");
 }
 
+const REVIEW_ID_SALT = String(process.env.REVIEW_ID_SALT || "").trim();
+if (!REVIEW_ID_SALT) {
+  if (NODE_ENV === "production") {
+    throw new Error("REVIEW_ID_SALT is required in production. Set this env var before starting.");
+  }
+  console.warn("REVIEW_ID_SALT is not set. Review ID generation will fail at runtime.");
+}
+
 // Fail closed: never allow bypass outside dev
 if (NODE_ENV === "production" && DEV_AUTH_BYPASS) {
   throw new Error(

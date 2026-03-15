@@ -2,6 +2,16 @@ require("dotenv").config();
 
 const app = require("./app");
 
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection:", reason);
+  process.exit(1);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err);
+  process.exit(1);
+});
+
 const PORT = Number(process.env.PORT) || 3000;
 
 /** Binds the Express app to `PORT` on all interfaces and exits on listen error. */

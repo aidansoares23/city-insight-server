@@ -78,13 +78,28 @@ async function deleteAccount({ userId }) {
 
   const snap = await db.collection("reviews").where("userId", "==", uid).get();
 
-  for (const doc of snap.docs) {
-    const cityId = doc.data()?.cityId;
-    if (cityId) {
-      await deleteMyReviewForCity({ cityId, userId: uid });
-    }
+  // Run all review deletions in parallel. Use allSettled so a single failure
+  // (e.g. transient network error) does not block the rest or prevent user deletion.
+  // NOT_FOUND means the review is already gone — safe to ignore.
+  const results = await Promise.allSettled(
+    snap.docs
+      .map((doc) => doc.data()?.cityId)
+      .filter(Boolean)
+      .map((cityId) => deleteMyReviewForCity({ cityId, userId: uid })),
+  );
+
+  const failures = results.filter(
+    (r) => r.status === "rejected" && r.reason?.code !== "NOT_FOUND",
+  );
+  if (failures.length > 0) {
+    console.error(
+      `[deleteAccount] ${failures.length} review deletion(s) failed for uid=${uid}:`,
+      failures.map((f) => f.reason?.message ?? String(f.reason)),
+    );
   }
 
+  // Delete the user document regardless — a partially cleaned up account is
+  // far better than a permanently blocked deletion.
   await db.collection("users").doc(uid).delete();
 
   return { deleted: true };

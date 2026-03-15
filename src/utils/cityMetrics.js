@@ -1,4 +1,4 @@
-const { db } = require("../config/firebase");
+const { db, admin } = require("../config/firebase");
 const { updatedTimestamp } = require("./timestamps");
 const {
   toNumOrNull,
@@ -86,7 +86,7 @@ async function upsertCityMetrics(cityId, patch, options = {}) {
     const changed = Object.keys(newValues).some((key) => newValues[key] !== prevValues[key]);
     await ref.collection("snapshots").add({
       pipeline: owner,
-      syncedAt: new Date().toISOString(),
+      syncedAt: admin.firestore.FieldValue.serverTimestamp(),
       prevValues,
       newValues,
       changed,

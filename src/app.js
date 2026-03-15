@@ -55,8 +55,8 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.use("/api/", apiLimiter);
 app.use("/api/auth/login", authLimiter);
+app.use("/api/", apiLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/cities", cityRoutes);

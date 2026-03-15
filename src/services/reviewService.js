@@ -220,6 +220,13 @@ async function listReviewsForCity({ cityId, pageSize, cursor }) {
     });
   }
 
+  if (cursor?.createdAt && !cursor?.id) {
+    throw new AppError("Malformed cursor: createdAt requires id", {
+      status: 400,
+      code: "BAD_CURSOR",
+    });
+  }
+
   // Preferred cursor: (createdAt, id)
   if (cursor?.id && cursor?.createdAt) {
     query = query.startAfter(cursor.createdAt, cursor.id);

@@ -17,7 +17,8 @@ async function getMe(req, res, next) {
 async function listMyReviews(req, res, next) {
   try {
     const userId = req.user.sub;
-    const limit = Math.min(Number(req.query.limit ?? 50), 100);
+    const rawLimit = Number(req.query.limit ?? 50);
+    const limit = Math.min(Number.isFinite(rawLimit) ? rawLimit : 50, 100);
     const reviews = await meService.listMyReviews({ userId, limit });
     res.json({ reviews });
   } catch (err) {

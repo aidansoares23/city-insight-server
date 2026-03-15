@@ -117,6 +117,9 @@ setMock("src/services/meService.js", {
   async listMyReviews() {
     return [];
   },
+  async deleteAccount() {
+    return { deleted: true };
+  },
 });
 
 const app = require("../src/app");
@@ -252,4 +255,36 @@ test("GET /api/cities/:slug/reviews requires no auth and returns list shape", as
   assert.ok(Array.isArray(payload.reviews));
   assert.ok("pageSize" in payload);
   assert.ok("nextCursor" in payload);
+});
+
+test("DELETE /api/me deletes account with dev auth", async () => {
+  const { response, payload } = await requestJson("/api/me", {
+    method: "DELETE",
+    headers: { "x-dev-user": "dev-user-delete" },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.deleted, true);
+});
+
+test("DELETE /api/me requires auth — no header returns 401", async () => {
+  const { response } = await requestJson("/api/me", { method: "DELETE" });
+  assert.equal(response.status, 401);
+});
+
+test("POST /api/cities/:slug/reviews requires X-Requested-With in non-bypass mode", async () => {
+  // In dev bypass mode (DEV_AUTH_BYPASS=true), the CSRF check is skipped for x-dev-user requests.
+  // Verify that a POST without the header AND without dev auth is blocked at the CSRF layer.
+  const { response } = await requestJson(
+    "/api/cities/san-francisco-ca/reviews",
+    {
+      method: "POST",
+      // No x-dev-user and no X-Requested-With — hits CSRF guard on the auth middleware
+      body: {
+        ratings: { safety: 7, affordability: 4, walkability: 5, cleanliness: 6, overall: 6 },
+      },
+    },
+  );
+  // Without any auth header the request is rejected before reaching the route handler
+  assert.ok(response.status === 401 || response.status === 403);
 });

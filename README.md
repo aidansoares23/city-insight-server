@@ -107,16 +107,20 @@ npm test
 
 Uses Node.js's built-in test runner — no external framework needed. All Firestore calls are mocked, so no Firebase connection is required.
 
-**104 tests, all passing** across 6 files:
+**138 tests, all passing** across 10 files:
 
-| File                                 | Tests | What it covers                                  |
-| ------------------------------------ | ----- | ----------------------------------------------- |
-| `test/app.smoke.test.js`             | 8     | HTTP routes, auth, CSRF                         |
-| `test/lib.numbers.test.js`           | 20    | Numeric utility functions                       |
-| `test/lib.reviews.test.js`           | 20    | Review validation + deterministic ID generation |
-| `test/middleware.requireAuth.test.js`| 17    | JWT validation, dev bypass, CSRF-lite           |
-| `test/utils.cityStats.test.js`       | 24    | Aggregation math + livability formula           |
-| `test/tasks.safety.test.js`          | 15    | Safety score formula + CSV parsing              |
+| File                                   | Tests | What it covers                                           |
+| -------------------------------------- | ----- | -------------------------------------------------------- |
+| `test/app.smoke.test.js`               | 11    | HTTP routes, auth, CSRF, account deletion                |
+| `test/lib.numbers.test.js`             | 20    | Numeric utility functions                                |
+| `test/lib.reviews.test.js`             | 20    | Review validation + deterministic ID generation          |
+| `test/middleware.requireAuth.test.js`  | 17    | JWT validation, dev bypass, CSRF-lite                    |
+| `test/utils.cityStats.test.js`         | 24    | Aggregation math + livability formula                    |
+| `test/tasks.safety.test.js`            | 15    | Safety score formula + CSV parsing                       |
+| `test/services.meService.test.js`      | 10    | Account deletion (partial failure recovery), user profile, review list |
+| `test/services.reviewService.test.js`  | 7     | Cursor validation (both directions), review lookup       |
+| `test/services.cityService.test.js`    | 9     | City list — all sort modes, search filter, 404 behaviour |
+| `test/utils.cityMetrics.test.js`       | 5     | Metrics upsert, null-guard, snapshot audit, getCityMetrics |
 
 CI runs `npm test` on every push and pull request to `main` via GitHub Actions.
 
@@ -145,7 +149,7 @@ Authenticated routes require a valid `ci_session` cookie (set automatically on l
 }
 ```
 
-Common codes: `NOT_FOUND`, `UNAUTHENTICATED`, `VALIDATION_ERROR`, `CSRF`, `CORS`, `RATE_LIMITED`, `INTERNAL`.
+Common codes: `NOT_FOUND`, `UNAUTHENTICATED`, `VALIDATION_ERROR`, `CSRF`, `CORS`, `RATE_LIMITED`, `BAD_CURSOR`, `INTERNAL`.
 
 **Rate limits:**
 
@@ -273,7 +277,7 @@ GET /api/cities/portland-or/reviews?pageSize=10&cursorId=abc123&cursorCreatedAt=
 | ------- | ------- | ------------------------------- |
 | `limit` | `50`    | Max results to return (1–100)   |
 
-**`DELETE /api/me`** has no body and returns `{ ok: true }` on success. All of the user's reviews are deleted atomically and city stats are recomputed. This action is irreversible.
+**`DELETE /api/me`** has no body and returns `{ ok: true, deleted: true }` on success. All of the user's reviews are deleted in parallel and city stats are recomputed per review; the user document is always removed even if individual review deletions encounter transient errors. This action is irreversible.
 
 ---
 

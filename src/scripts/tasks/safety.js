@@ -146,7 +146,7 @@ async function taskSafety({ dir, dryRun = false, verbose = false } = {}) {
       .trim()
       .toLowerCase();
     const fullPath = path.join(DATA_DIR, file);
-    const csvText = fs.readFileSync(fullPath, "utf8");
+    const csvText = await fs.promises.readFile(fullPath, "utf8");
 
     const parsed = readCrimeRowsFromCsv(csvText);
     if (!parsed) {
