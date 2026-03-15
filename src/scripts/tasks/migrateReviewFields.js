@@ -1,5 +1,3 @@
-// src/scripts/tasks/migrateReviewFields.js
-//
 // One-time migration: rename cost→affordability and traffic→walkability
 // on all Firestore review documents and city_stats sums, then recompute
 // city_stats for every affected city.
@@ -15,6 +13,13 @@ const { recomputeCityStatsFromReviews } = require("../../utils/cityStats");
 
 const BATCH_LIMIT = 450;
 
+/**
+ * One-time migration: renames `cost`→`affordability` and `traffic`→`walkability`
+ * on all review documents and `city_stats` sums, then recomputes `city_stats` from
+ * the migrated reviews. Processes reviews in batches of 300; writes in batches of 450.
+ * @param {{ dryRun?: boolean }} [options]
+ * @returns {Promise<{ reviewsScanned: number, reviewsUpdated: number, statsUpdated: number }>}
+ */
 async function taskMigrateReviewFields({ dryRun = false } = {}) {
   console.log(`[migrateReviewFields] dryRun=${dryRun}`);
 

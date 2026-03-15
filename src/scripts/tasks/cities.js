@@ -1,6 +1,7 @@
 const { db, admin } = require("../../config/firebase");
 const { toOptionalNumOrNull } = require("../../lib/numbers");
 
+/** Splits a comma-separated highlights string into a trimmed array; returns `[]` if falsy. */
 function parseHighlights(raw) {
   if (!raw) return [];
   return String(raw)
@@ -9,17 +10,24 @@ function parseHighlights(raw) {
     .filter(Boolean);
 }
 
+/** Trims and lowercases a raw slug string. */
 function normalizeSlug(raw) {
   return String(raw || "")
     .trim()
     .toLowerCase();
 }
 
+/** Trims a raw string and returns it, or `null` if blank. */
 function normalizeStringOrNull(raw) {
   const s = String(raw ?? "").trim();
   return s ? s : null;
 }
 
+/**
+ * Validates required city fields; returns an array of error strings (empty if valid).
+ * @param {{ slug: string, name: string, state: string }} fields
+ * @returns {string[]}
+ */
 function validateRequired({ slug, name, state }) {
   const errors = [];
   if (!slug) errors.push("slug is required");
@@ -29,6 +37,12 @@ function validateRequired({ slug, name, state }) {
   return errors;
 }
 
+/**
+ * Creates or non-destructively updates a city document in Firestore.
+ * Normalizes all fields before writing; sets `createdAt` only on first creation.
+ * @param {{ slug: string, name: string, state: string, lat?: string, lng?: string, tagline?: string, description?: string, highlights?: string, dryRun?: boolean }} [options]
+ * @returns {Promise<{ ok: boolean, cityId: string, created: boolean|null, dryRun: boolean }>}
+ */
 async function taskCityUpsert({
   slug,
   name,

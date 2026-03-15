@@ -1,5 +1,6 @@
 const meService = require("../services/meService");
 
+/** Upserts the authenticated user from their JWT claims and returns `{ user, created }`. */
 async function getMe(req, res, next) {
   try {
     const result = await meService.upsertMeFromAuthClaims(req.user);
@@ -12,6 +13,7 @@ async function getMe(req, res, next) {
   }
 }
 
+/** Returns the authenticated user's reviews; accepts `limit` query param (capped at 100). */
 async function listMyReviews(req, res, next) {
   try {
     const userId = req.user.sub;
@@ -23,6 +25,7 @@ async function listMyReviews(req, res, next) {
   }
 }
 
+/** Permanently deletes the authenticated user's account and all their reviews. */
 async function deleteAccount(req, res, next) {
   try {
     const userId = req.user.sub;

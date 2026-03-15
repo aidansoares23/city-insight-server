@@ -4,6 +4,12 @@ const { tsToIso } = require("../lib/firestore");
 const { deleteMyReviewForCity } = require("./reviewService");
 const { AppError } = require("../lib/errors");
 
+/**
+ * Creates or updates the authenticated user's Firestore document from their JWT claims.
+ * Sets `createdAt`/`updatedAt` server timestamps on first write; only `updatedAt` on subsequent writes.
+ * @param {{ sub: string, email?: string, name?: string, picture?: string }} userClaims
+ * @returns {Promise<{ created: boolean, user: object|null, sub: string }>}
+ */
 async function upsertMeFromAuthClaims(userClaims) {
   const sub = userClaims?.sub;
   if (!sub) throw new AppError("Missing user identity", { status: 401, code: "UNAUTHENTICATED" });
@@ -28,6 +34,11 @@ async function upsertMeFromAuthClaims(userClaims) {
   return { created: !snap.exists, user: savedSnap.data() || null, sub };
 }
 
+/**
+ * Returns up to `limit` reviews authored by `userId`, ordered by most recently updated.
+ * @param {{ userId: string, limit?: number }} options - limit capped at 100
+ * @returns {Promise<object[]>}
+ */
 async function listMyReviews({ userId, limit = 50 }) {
   const uid = String(userId || "").trim();
   if (!uid) throw new AppError("Missing user identity", { status: 401, code: "UNAUTHENTICATED" });
@@ -55,6 +66,12 @@ async function listMyReviews({ userId, limit = 50 }) {
   });
 }
 
+/**
+ * Permanently deletes the user's account and all their reviews.
+ * Each review deletion goes through `deleteMyReviewForCity` so city stats are recomputed correctly.
+ * @param {{ userId: string }} options
+ * @returns {Promise<{ deleted: true }>}
+ */
 async function deleteAccount({ userId }) {
   const uid = String(userId || "").trim();
   if (!uid) throw new AppError("Missing user identity", { status: 401, code: "UNAUTHENTICATED" });

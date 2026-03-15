@@ -9,11 +9,12 @@ const {
 const { isPlainObject } = require("../lib/objects");
 const { REQUIRED_RATING_KEYS: RATING_KEYS } = require("../lib/reviews");
 
+/** Returns `0` if `n` is negative; otherwise returns `n` unchanged. */
 function clampNonNegative(n) {
   return n < 0 ? 0 : n;
 }
 
-// Missing or non-numeric values become 0 — correct for aggregation math.
+/** Coerces all rating keys to finite numbers; missing or non-numeric values become `0` (safe for aggregation). */
 function normalizeRatings(ratings) {
   const ratingsInput = isPlainObject(ratings) ? ratings : {};
   const result = {};
@@ -22,6 +23,7 @@ function normalizeRatings(ratings) {
   return result;
 }
 
+/** Adds two rating objects element-wise across all rating keys. */
 function addRatings(a, b) {
   const ratingsA = normalizeRatings(a);
   const ratingsB = normalizeRatings(b);
@@ -30,6 +32,7 @@ function addRatings(a, b) {
   return result;
 }
 
+/** Subtracts rating object `b` from `a` element-wise across all rating keys. */
 function subRatings(a, b) {
   const ratingsA = normalizeRatings(a);
   const ratingsB = normalizeRatings(b);
@@ -38,6 +41,7 @@ function subRatings(a, b) {
   return result;
 }
 
+/** Divides each sum by `count` to produce per-key averages; returns `null` for each key if `count` is 0. */
 function computeAverages(count, sums) {
   const totalCount = toFiniteNumber(count, 0);
   const normalizedSums = normalizeRatings(sums);
@@ -46,13 +50,17 @@ function computeAverages(count, sums) {
   return averages;
 }
 
+/** Extracts `count` and `sums` from a `city_stats` document and returns `{ count, sums, averages }`. */
 function computeAveragesFromStats(statsDoc) {
   const count = toFiniteNumber(statsDoc?.count, 0);
   const sums = normalizeRatings(statsDoc?.sums);
   return { count, sums, averages: computeAverages(count, sums) };
 }
 
-// Throws rather than clamping so aggregate bugs surface immediately.
+/**
+ * Throws if any rating sum is below `-epsilon` (default `1e-6`).
+ * Throws rather than clamping so aggregate bugs surface immediately instead of silently corrupting data.
+ */
 function assertSumsNonNegative({ cityId, sums, epsilon = 1e-6 }) {
   for (const key of RATING_KEYS) {
     const sumValue = toFiniteNumber(sums?.[key], 0);
@@ -61,13 +69,15 @@ function assertSumsNonNegative({ cityId, sums, epsilon = 1e-6 }) {
   }
 }
 
-/*
- * Weighted blend of up to three signals. Missing signals are dropped and
- * remaining weights renormalized rather than treated as zero.
+/**
+ * Computes a weighted livability score (0–100) from up to three signals.
+ * Missing signals are dropped and remaining weights renormalized rather than treated as zero.
  *
  *   50%  review overall      (1–10 → 0–100)
  *   35%  safety score        (0–10 → 0–100)
- *   15%  rent affordability  (medianRent vs $3500 ceiling → 0–100)
+ *   15%  rent affordability  (medianRent vs $3,500 ceiling → 0–100)
+ *
+ * @returns {{ version: "v0", score: number|null }}
  */
 function computeLivabilityV0({ averages, metrics }) {
   const overallRating = toFiniteNumber(averages?.overall, NaN);
@@ -98,6 +108,7 @@ function computeLivabilityV0({ averages, metrics }) {
   return { version: "v0", score };
 }
 
+/** Normalizes a raw `city_metrics` document into `{ cityId, medianRent, population, safetyScore }` with null-safe coercion. */
 function normalizeFlatCityMetrics(cityId, metricsDoc) {
   const safeDoc = isPlainObject(metricsDoc) ? metricsDoc : {};
   return {
@@ -108,6 +119,10 @@ function normalizeFlatCityMetrics(cityId, metricsDoc) {
   };
 }
 
+/**
+ * Applies an incremental delta to `city_stats` in a Firestore transaction, then recomputes livability.
+ * Use `deltaCount = +1` / `-1` and `deltaRatings` as the review's ratings when adding/removing a review.
+ */
 async function applyCityStatsDelta(cityId, { deltaCount, deltaRatings }) {
   const statsRef = db.collection("city_stats").doc(cityId);
   const metricsRef = db.collection("city_metrics").doc(cityId);
@@ -134,6 +149,7 @@ async function applyCityStatsDelta(cityId, { deltaCount, deltaRatings }) {
   });
 }
 
+/** Recomputes and writes the livability score for a city from its current `city_stats` and `city_metrics` in a transaction. */
 async function recomputeCityLivability(cityId) {
   const statsRef = db.collection("city_stats").doc(cityId);
   const metricsRef = db.collection("city_metrics").doc(cityId);
@@ -154,6 +170,7 @@ async function recomputeCityLivability(cityId) {
   });
 }
 
+/** Full recompute: aggregates all reviews for a city, writes corrected `city_stats`, then calls `recomputeCityLivability`. */
 async function recomputeCityStatsFromReviews(cityId) {
   const snap = await db.collection("reviews").where("cityId", "==", cityId).get();
 

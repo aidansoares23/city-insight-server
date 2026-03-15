@@ -1,7 +1,12 @@
-// src/scripts/tasks/stats.js
 const { db } = require("../../config/firebase");
 const { recomputeCityStatsFromReviews } = require("../../utils/cityStats");
 
+/**
+ * Recomputes `city_stats` from the reviews collection for one or all cities.
+ * Requires `--all` or `--city`; passing both is an error.
+ * @param {{ all?: boolean, city?: string|null, dryRun?: boolean }} [options]
+ * @returns {Promise<{ touchedCityIds: string[], ok?: number, fail?: number }>}
+ */
 async function taskStats({ all = false, city = null, dryRun = false } = {}) {
   if (!all && !city) throw new Error("stats requires --all or --city <slug>");
   if (all && city) throw new Error("use either --all OR --city, not both");

@@ -1,6 +1,11 @@
 const admin = require("firebase-admin");
 const path = require("path");
 
+/**
+ * Initializes Firebase Admin SDK once (idempotent).
+ * Reads `FIREBASE_SERVICE_ACCOUNT_PATH` from env; resolves relative paths against `cwd()`.
+ * Throws if the env var is missing.
+ */
 function initFirebaseAdmin() {
   if (admin.apps.length) return;
 

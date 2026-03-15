@@ -1,4 +1,3 @@
-// src/scripts/devInit.js
 // Run: node src/scripts/devInit.js
 //
 // Flags:
@@ -16,7 +15,6 @@ const crypto = require("crypto");
 const { initAdmin } = require("./lib/initAdmin");
 initAdmin();
 
-// IMPORTANT: import after initAdmin so your config/firebase can reuse the existing admin app
 const { admin, db } = require("../config/firebase");
 const { recomputeCityStatsFromReviews } = require("../utils/cityStats");
 
@@ -35,9 +33,6 @@ if (WIPE_ALL_REVIEWS && WIPE_SEEDED_REVIEWS) {
   process.exit(1);
 }
 
-// --------------------
-// Seed data
-// --------------------
 const CITIES = [
   {
     slug: "san-francisco-ca",
@@ -169,10 +164,6 @@ const METRICS = {
   "sacramento-ca": { medianRent: 1900, population: 526384, safetyScore: null },
 };
 
-// --------------------
-// Helpers
-// --------------------
-
 function makeReviewId(userId, cityId) {
   const salt = process.env.REVIEW_ID_SALT;
   if (!salt) throw new Error("Missing REVIEW_ID_SALT in .env");
@@ -301,7 +292,6 @@ function generateComment(cityId, ratings, userIndex) {
         ? "Cleanliness was mixed depending on where you are."
         : "Most places I went felt clean and well kept.";
 
-  // Keep comments ~2–4 sentences and aligned to ratings
   return `${base} ${cityLine} ${safetyNote} ${costNote} ${trafficNote} ${cleanNote}`;
 }
 
@@ -312,11 +302,9 @@ function buildCityDoc(c) {
     slug: c.slug,
     lat: c.lat ?? null,
     lng: c.lng ?? null,
-    // NEW: descriptions live on the city doc
     tagline: c.tagline ?? null,
     description: c.description ?? null,
     highlights: Array.isArray(c.highlights) ? c.highlights : [],
-    // NOTE: createdAt is set only if city doc doesn't exist (see seeding loop)
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 }
@@ -352,10 +340,6 @@ function buildMetricsPatch(cityId, m) {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 }
-
-// --------------------
-// Wipes
-// --------------------
 
 async function wipeAllReviews() {
   console.log("⚠️  Wiping ALL reviews...");
@@ -401,10 +385,6 @@ async function wipeSeededReviews(seedUserIds) {
 
   console.log(`✅ Deleted ${deletedTotal} seeded review(s).`);
 }
-
-// --------------------
-// Main
-// --------------------
 
 async function main() {
   // 0) Optional wipes
@@ -475,7 +455,6 @@ async function main() {
           userId: u.id,
           cityId,
           ratings,
-          // NEW: realistic-ish seeded comments aligned to ratings and city
           comment: generateComment(cityId, ratings, userIndex),
         });
       });

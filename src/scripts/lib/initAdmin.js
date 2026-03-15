@@ -1,9 +1,13 @@
-// src/scripts/lib/initAdmin.js
 require("dotenv").config();
 
 const admin = require("firebase-admin");
 const path = require("path");
 
+/**
+ * Initializes the Firebase Admin SDK using the service account at `FIREBASE_SERVICE_ACCOUNT_PATH`.
+ * Idempotent — returns the existing `admin` instance if already initialized.
+ * @returns {import("firebase-admin")} the initialized admin instance
+ */
 function initAdmin() {
   if (admin.apps.length) return admin;
 

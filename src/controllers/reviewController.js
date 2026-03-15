@@ -11,6 +11,7 @@ const {
 
 const reviewService = require("../services/reviewService");
 
+/** Shapes a Firestore review document into the public API response format with ISO timestamps. */
 function toReview(docId, data) {
   return withIsoTimestamps({
     id: docId,
@@ -23,10 +24,12 @@ function toReview(docId, data) {
   });
 }
 
+/** Extends `toReview` with the `userId` field for authenticated user responses. */
 function toMyReview(docId, data) {
   return { ...toReview(docId, data), userId: data.userId };
 }
 
+/** Validates and upserts the authenticated user's review for a city; returns 201 on create, 200 on update. */
 async function createOrUpdateReviewForCity(req, res, next) {
   try {
     const cityId = String(req.params.slug).trim().toLowerCase();
@@ -63,6 +66,7 @@ async function createOrUpdateReviewForCity(req, res, next) {
   }
 }
 
+/** Returns a paginated list of reviews for a city; accepts `pageSize` (1–50) and cursor query params. */
 async function listReviewsForCity(req, res, next) {
   try {
     const cityId = String(req.params.slug).trim().toLowerCase();
@@ -92,6 +96,7 @@ async function listReviewsForCity(req, res, next) {
   }
 }
 
+/** Fetches a single review by `reviewId` scoped to a city; 404s if not found or if the review belongs to a different city. */
 async function getReviewByIdForCity(req, res, next) {
   try {
     const cityId = String(req.params.slug).trim().toLowerCase();
@@ -113,6 +118,7 @@ async function getReviewByIdForCity(req, res, next) {
   }
 }
 
+/** Returns the authenticated user's review for a city, or `{ review: null }` if none exists. */
 async function getMyReviewForCity(req, res, next) {
   try {
     const cityId = String(req.params.slug).trim().toLowerCase();
@@ -130,6 +136,7 @@ async function getMyReviewForCity(req, res, next) {
   }
 }
 
+/** Deletes the authenticated user's review for a city and returns `{ ok: true, deleted: true }`. */
 async function deleteMyReviewForCity(req, res, next) {
   try {
     const cityId = String(req.params.slug).trim().toLowerCase();

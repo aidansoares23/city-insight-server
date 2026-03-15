@@ -4,6 +4,7 @@ const { GOOGLE_CLIENT_ID, NODE_ENV } = require("../config/env");
 
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
+/** Returns Express `res.cookie` options; sets `secure` and `sameSite: "none"` in production for cross-site cookies. */
 function cookieOptions() {
   const isProd = NODE_ENV === "production";
   return {
@@ -15,6 +16,7 @@ function cookieOptions() {
   };
 }
 
+/** Verifies a Google ID token, signs a 7-day session JWT, sets the `ci_session` httpOnly cookie, and returns the user payload. */
 async function login(req, res, next) {
   try {
     const idToken = String(req.body?.idToken || "").trim();
@@ -67,6 +69,7 @@ async function login(req, res, next) {
   }
 }
 
+/** Clears the `ci_session` cookie and returns `{ ok: true }`. */
 function logout(_req, res) {
   res.clearCookie("ci_session", { ...cookieOptions(), maxAge: 0 });
   return res.json({ ok: true });

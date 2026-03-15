@@ -11,6 +11,7 @@ const { taskCityUpsert } = require("./tasks/cities");
 const { taskRun } = require("./tasks/run");
 const { taskMigrateReviewFields } = require("./tasks/migrateReviewFields");
 
+/** Parses a comma-separated city slug string into a lowercase array, or `null` if empty. */
 function parseCities(val) {
   if (!val) return null;
   return String(val)
@@ -19,9 +20,10 @@ function parseCities(val) {
     .filter(Boolean);
 }
 
+/** Initializes Firebase Admin then runs `fn()`; used to wrap each CLI command action. */
 async function withAdmin(fn) {
   initAdmin();
-  return await fn(); // important: await so rejections propagate reliably
+  return await fn();
 }
 
 const program = new Command();
@@ -185,7 +187,6 @@ program
     ),
   );
 
-// IMPORTANT: No default action. If no args, show help and exit 0.
 if (process.argv.length <= 2) {
   program.help(); // prints + exits
 }

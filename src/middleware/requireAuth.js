@@ -1,11 +1,16 @@
 const jwt = require("jsonwebtoken");
 const { NODE_ENV, DEV_AUTH_BYPASS } = require("../config/env");
 
+/** Returns `true` if `ip` is a loopback address (`127.0.0.1`, `::1`, or `::ffff:127.0.0.1`). */
 function isLocalhostIp(ip) {
   const ipStr = String(ip || "");
   return ipStr === "127.0.0.1" || ipStr === "::1" || ipStr === "::ffff:127.0.0.1";
 }
 
+/**
+ * Returns `true` if the request originates from localhost with no `x-forwarded-for` header.
+ * Used to gate the dev auth bypass so it can never be triggered from a proxied/remote request.
+ */
 function isLocalDevRequest(req) {
   const derivedIp = req.ip;
   const socketIp = req.socket?.remoteAddress;
@@ -16,12 +21,17 @@ function isLocalDevRequest(req) {
   );
 }
 
+/** Returns `true` for POST, PUT, PATCH, and DELETE requests. */
 function isStateChangingMethod(req) {
   const method = String(req.method || "").toUpperCase();
   return method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
 }
 
-// Blocks cross-site form submits — browsers can't set custom headers in HTML forms.
+/**
+ * CSRF-lite check: verifies that state-changing requests include `X-Requested-With: XMLHttpRequest`.
+ * Browsers cannot set custom headers in plain HTML form submits, so this blocks cross-site form attacks.
+ * Returns `true` if the request passes; writes a 403 and returns `false` if it fails.
+ */
 function enforceCsrfLite(req, res) {
   if (!isStateChangingMethod(req)) return true;
 
@@ -35,6 +45,12 @@ function enforceCsrfLite(req, res) {
   return true;
 }
 
+/**
+ * Express middleware that enforces authentication on a route.
+ * In non-production with `DEV_AUTH_BYPASS=true`, allows localhost requests bearing an `x-dev-user` header.
+ * Otherwise verifies the `ci_session` JWT cookie and enforces the CSRF-lite header on state-changing methods.
+ * Populates `req.user` with `{ sub, email, name, picture }` on success.
+ */
 async function requireAuth(req, res, next) {
   try {
     const isProd = NODE_ENV === "production";

@@ -2,6 +2,7 @@ const rateLimit = require("express-rate-limit");
 
 const { NODE_ENV } = require("../config/env");
 
+/** express-rate-limit handler that returns a 429 JSON error response. */
 function handler(req, res) {
   res.status(429).json({
     error: {

@@ -1,3 +1,4 @@
+/** Express middleware that returns a `404 NOT_FOUND` JSON response for unmatched routes. */
 function notFoundHandler(req, res, next) {
   res.status(404).json({
     error: {
@@ -7,6 +8,11 @@ function notFoundHandler(req, res, next) {
   });
 }
 
+/**
+ * Express error-handling middleware (4-arg signature).
+ * Logs the error, derives HTTP status/code/message from the error object (falling back to 500/INTERNAL),
+ * and returns a JSON `{ error }` payload. Attaches `details` when present.
+ */
 function errorHandler(err, req, res, next) {
   const status = Number.isFinite(Number(err?.status)) ? Number(err.status) : 500;
 

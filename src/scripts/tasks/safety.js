@@ -1,4 +1,3 @@
-// src/scripts/tasks/safety.js
 const fs = require("fs");
 const path = require("path");
 
@@ -7,9 +6,7 @@ const { clamp0to10 } = require("../../lib/numbers");
 const { upsertCityMetrics } = require("../../utils/cityMetrics");
 const { recomputeCityLivability } = require("../../utils/cityStats");
 
-// -----------------------------
-// Config (tune later)
-// -----------------------------
+// Config
 const YEARS_TO_AVG = 3;
 const WEIGHT_VIOLENT = 3;
 const WEIGHT_PROPERTY = 1;
@@ -20,17 +17,15 @@ const WEIGHT_PROPERTY = 1;
 const RATE_AT_ZERO = 2500;
 const SAFETY_PIPELINE_VERSION = "syncSafetyFromCsv:v2";
 
-// -----------------------------
-// Path resolution (task-friendly)
-// -----------------------------
+// Path resolution
+/** Resolves the CSV data directory: defaults to `<cwd>/src/data` when `dirArg` is falsy. */
 function resolveDataDir(dirArg) {
   if (!dirArg) return path.join(process.cwd(), "src", "data");
   return path.isAbsolute(dirArg) ? dirArg : path.join(process.cwd(), dirArg);
 }
 
-// -----------------------------
-// CSV parsing helpers (same logic as syncSafetyFromCsv.js)
-// -----------------------------
+// CSV parsing
+/** Parses a single CSV line where every field is wrapped in double quotes. */
 function parseQuotedCsvLine(line) {
   const fields = [];
   const re = /"([^"]*)"(?:,|$)/g;
@@ -39,6 +34,7 @@ function parseQuotedCsvLine(line) {
   return fields;
 }
 
+/** Parses a count cell (possibly comma-formatted, e.g. `"1,234"`) to a finite number or `null`. */
 function parseCount(cell) {
   if (cell == null) return null;
   const s = String(cell).trim();
@@ -57,11 +53,16 @@ function computeSafetyScoreFromIndex(crimeIndexPer100k) {
   // 0..10 where 10 is safest
   const raw10 = 10 - (crimeIndexPer100k / RATE_AT_ZERO) * 10;
 
-  // choose one:
-  // return Math.round(clamp0to10(raw10));             // integer 0–10
-  return Math.round(clamp0to10(raw10) * 10) / 10; // 1 decimal (recommended)
+  return Math.round(clamp0to10(raw10) * 10) / 10;
 }
 
+/**
+ * Parses crime CSV text into a structured object.
+ * Expects a quoted-CSV format with a header row (first column = label, rest = years)
+ * and data rows keyed by crime category label (e.g. "Violent Crimes").
+ * @param {string} csvText
+ * @returns {{ years: string[], rows: Map<string, string[]> }|null} null if the file is empty
+ */
 function readCrimeRowsFromCsv(csvText) {
   const lines = csvText
     .split(/\r?\n/)
@@ -88,6 +89,13 @@ function readCrimeRowsFromCsv(csvText) {
   return { years, rows };
 }
 
+/**
+ * Averages the last `n` finite values from `cells`, reading from the most recent year backward.
+ * @param {string[]} years - year labels (used only for length; values traversed right-to-left)
+ * @param {string[]|undefined} cells - raw cell values aligned to `years`
+ * @param {number} n - number of years to average
+ * @returns {{ avg: number|null, used: number }}
+ */
 function avgLastNYears(years, cells, n) {
   const values = [];
   for (let i = years.length - 1; i >= 0; i--) {
@@ -100,9 +108,8 @@ function avgLastNYears(years, cells, n) {
   return { avg, used: values.length };
 }
 
-// -----------------------------
 // Firestore helpers
-// -----------------------------
+/** Reads the stored population from `city_metrics`; returns `null` if missing or zero. */
 async function getPopulation(cityId) {
   const snap = await db.collection("city_metrics").doc(cityId).get();
   if (!snap.exists) return null;
@@ -110,9 +117,14 @@ async function getPopulation(cityId) {
   return Number.isFinite(pop) && pop > 0 ? pop : null;
 }
 
-// -----------------------------
-// Task entry
-// -----------------------------
+/**
+ * Syncs safety scores from per-city CSV files into `city_metrics`.
+ * Each CSV file must be named `<city-slug>.csv` and contain quoted rows for
+ * "Violent Crimes" and "Property Crimes" with yearly count columns.
+ * Uses a 3-year weighted average (3× violent + 1× property) normalized against population.
+ * @param {{ dir?: string|null, dryRun?: boolean, verbose?: boolean }} [options]
+ * @returns {Promise<{ touchedCityIds: string[] }>}
+ */
 async function taskSafety({ dir, dryRun = false, verbose = false } = {}) {
   const DATA_DIR = resolveDataDir(dir);
 

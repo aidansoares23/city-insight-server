@@ -1,6 +1,7 @@
 const { withIsoTimestamps } = require("../lib/firestore");
 const cityService = require("../services/cityService");
 
+/** Returns a filtered, sorted list of cities; accepts `limit`, `q` (search), and `sort` query params. */
 async function listCities(req, res, next) {
   try {
     const result = await cityService.listCities({
@@ -14,6 +15,7 @@ async function listCities(req, res, next) {
   }
 }
 
+/** Returns a single city document by slug with ISO timestamps; 404s if not found. */
 async function getCityBySlug(req, res, next) {
   try {
     const cityDoc = await cityService.getCityBySlug(req.params.slug);
@@ -25,6 +27,7 @@ async function getCityBySlug(req, res, next) {
   }
 }
 
+/** Returns full city detail: stats, metrics, livability score, and recent reviews. */
 async function getCityDetails(req, res, next) {
   try {
     const result = await cityService.getCityDetails(req.params.slug);

@@ -1,7 +1,12 @@
-// src/scripts/tasks/livability.js
 const { db } = require("../../config/firebase");
 const { recomputeCityLivability } = require("../../utils/cityStats");
 
+/**
+ * Recomputes the livability score (from existing stats + metrics) for one or all cities.
+ * Requires `--all` or `--city`; passing both is an error.
+ * @param {{ all?: boolean, city?: string|null, dryRun?: boolean }} [options]
+ * @returns {Promise<{ touchedCityIds: string[] }>}
+ */
 async function taskLivability({
   all = false,
   city = null,

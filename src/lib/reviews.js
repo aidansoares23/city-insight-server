@@ -10,6 +10,10 @@ const REQUIRED_RATING_KEYS = [
 ];
 const MAX_COMMENT_LEN = 800;
 
+/**
+ * Generates a deterministic 32-char review document ID from `userId` and `cityId`
+ * using SHA-256 HMAC with `REVIEW_ID_SALT`. Ensures one review per user per city.
+ */
 function makeReviewId(userId, cityId) {
   const salt = process.env.REVIEW_ID_SALT;
   if (!salt) throw new Error("Missing REVIEW_ID_SALT in env");
@@ -21,6 +25,10 @@ function makeReviewId(userId, cityId) {
     .slice(0, 32);
 }
 
+/**
+ * Validates that `ratings` is a plain object containing all required keys as finite integers in [1, 10].
+ * @returns {string[]} array of error messages; empty if valid
+ */
 function validateRatings(ratings) {
   const errors = [];
   if (!isPlainObject(ratings)) return ["ratings is required (object)"];
@@ -40,6 +48,10 @@ function validateRatings(ratings) {
   return errors;
 }
 
+/**
+ * Validates the full review request body: ratings (via `validateRatings`) and optional comment (≤ 800 chars).
+ * @returns {{ ok: boolean, errors: string[] }}
+ */
 function validateReviewBody(body) {
   const errors = [];
   if (!isPlainObject(body)) {
@@ -59,6 +71,7 @@ function validateReviewBody(body) {
   return { ok: errors.length === 0, errors };
 }
 
+/** Coerces all required rating keys to finite rounded integers; missing/invalid keys default to `0`. */
 function normalizeIncomingRatings(ratings) {
   const normalized = {};
   for (const key of REQUIRED_RATING_KEYS) {
@@ -69,6 +82,7 @@ function normalizeIncomingRatings(ratings) {
   return normalized;
 }
 
+/** Trims a comment string; returns `null` if the input is null/undefined or empty after trimming. */
 function normalizeIncomingComment(comment) {
   if (comment == null) return null;
   const trimmed = String(comment).trim();

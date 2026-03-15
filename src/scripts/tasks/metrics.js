@@ -1,4 +1,3 @@
-// src/scripts/tasks/metrics.js
 const { upsertCityMetrics } = require("../../utils/cityMetrics");
 const { recomputeCityLivability } = require("../../utils/cityStats");
 const { db } = require("../../config/firebase");
@@ -10,6 +9,11 @@ const ACS_DATASET = `https://api.census.gov/data/${ACS_YEAR}/acs/acs5`;
 const ACS_VARS = ["B01003_001E", "B25064_001E", "NAME"];
 const ACS_GEO = "&for=place:*&in=state:06";
 
+/**
+ * Fetches ACS 5-year population and median rent data for all California places.
+ * Requires Node.js 18+ for the global `fetch` API.
+ * @returns {Promise<Array<{ name: string, population: number|null, medianRent: number|null }>>}
+ */
 async function fetchAcsPlacesCA() {
   if (typeof globalThis.fetch !== "function") {
     throw new Error("Global fetch is unavailable. Use Node.js 18+.");
@@ -36,11 +40,17 @@ async function fetchAcsPlacesCA() {
   }));
 }
 
+/**
+ * Syncs population and median rent from the Census ACS API into `city_metrics`.
+ * Matches ACS place names to city slugs via `censusNameToSlug`; unmatched cities are skipped.
+ * Triggers a livability recompute after each successful upsert.
+ * @param {{ cities?: string[]|null, dryRun?: boolean, verbose?: boolean }} [options]
+ * @returns {Promise<{ touchedCityIds: string[] }>}
+ */
 async function taskMetrics({ cities, dryRun = false, verbose = false } = {}) {
   let cityIds = cities;
 
   if (!cityIds || cityIds.length === 0) {
-    // default: all cities in Firestore
     const snap = await db.collection("cities").get();
     cityIds = snap.docs.map((d) => d.id);
   }

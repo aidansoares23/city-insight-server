@@ -5,14 +5,17 @@ const { tsToIso, buildNextCursorFromDoc } = require("../lib/firestore");
 const { toNumOrNull } = require("../lib/numbers");
 const { AppError } = require("../lib/errors");
 
+/** Trims and lowercases a raw city ID / slug for consistent Firestore doc lookups. */
 function normalizeId(rawId) {
   return String(rawId ?? "")
     .trim()
     .toLowerCase();
 }
 
-// Cities with no data for a metric (null) sort to the end regardless of direction,
-// so incomplete cities don't crowd the top of sorted lists.
+/**
+ * Descending comparator that sorts `null` values to the end.
+ * Ensures cities with no data for a metric don't crowd the top of sorted lists.
+ */
 function cmpNullLastDesc(a, b) {
   const aNum = toNumOrNull(a);
   const bNum = toNumOrNull(b);
@@ -22,6 +25,7 @@ function cmpNullLastDesc(a, b) {
   return bNum - aNum;
 }
 
+/** Ascending comparator that sorts `null` values to the end. */
 function cmpNullLastAsc(a, b) {
   const aNum = toNumOrNull(a);
   const bNum = toNumOrNull(b);
@@ -31,6 +35,16 @@ function cmpNullLastAsc(a, b) {
   return aNum - bNum;
 }
 
+/**
+ * Returns a filtered, sorted, and paginated list of cities with stats and metrics.
+ * Fetches all city docs, then bulk-reads `city_stats` and `city_metrics` in two parallel
+ * `getAll()` calls before applying optional text search, sort, and limit.
+ * @param {object} [options]
+ * @param {number|string} [options.limit=50] - max results, capped at 100
+ * @param {string} [options.q] - search string matched against name, state, and slug
+ * @param {string} [options.sort="name_asc"] - sort key: `name_asc`, `livability_desc`, `safety_desc`, `rent_asc`, `rent_desc`, `reviews_desc`
+ * @returns {Promise<{ cities: object[], meta: object }>}
+ */
 async function listCities({ limit, q, sort } = {}) {
   const parsedLimit = Number.parseInt(String(limit ?? "50"), 10);
   const safeLimit = Number.isFinite(parsedLimit)
@@ -146,6 +160,11 @@ async function listCities({ limit, q, sort } = {}) {
   };
 }
 
+/**
+ * Fetches a single city document by slug; throws a 404 `AppError` if not found.
+ * @param {string} slug
+ * @returns {Promise<{ id: string, data: object }>}
+ */
 async function getCityBySlug(slug) {
   const cityId = normalizeId(slug);
   const snap = await db.collection("cities").doc(cityId).get();
@@ -155,6 +174,13 @@ async function getCityBySlug(slug) {
   return { id: snap.id, data: snap.data() || {} };
 }
 
+/**
+ * Returns full city detail: city fields, computed rating averages, external metrics,
+ * livability score, and the most recent 10 reviews with a pagination cursor.
+ * Throws a 404 `AppError` if the city does not exist.
+ * @param {string} slug
+ * @returns {Promise<{ city: object, stats: object, metrics: object, livability: object, reviews: object[], reviewsPage: object }>}
+ */
 async function getCityDetails(slug) {
   const cityId = normalizeId(slug);
 

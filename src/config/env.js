@@ -1,3 +1,4 @@
+/** Converts a string env var to a boolean; returns `true` only when the trimmed lowercase value equals `"true"`. */
 function parseBool(val) {
   return String(val || "").trim().toLowerCase() === "true";
 }

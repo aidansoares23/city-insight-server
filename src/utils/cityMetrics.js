@@ -21,6 +21,7 @@ const METRIC_FIELDS = [
   { key: "crimeIndexPer100k",  normalize: toNumOrNull },
 ];
 
+/** Filters `patch` to only include fields in `allowedSet`, plus `meta` if present (always passed through). */
 function pickOwnedFields(patch, allowedSet) {
   const ownedFields = {};
   for (const key of allowedSet) {
@@ -32,6 +33,12 @@ function pickOwnedFields(patch, allowedSet) {
 }
 
 
+/**
+ * Upserts a `city_metrics` document for `cityId`.
+ * When `options.owner` is set, only that pipeline's owned fields are written (enforced via `OWNERS` map),
+ * null values won't overwrite existing data (null-guard), and a snapshot is recorded for audit.
+ * Namespaced `meta` updates use dotted field paths to avoid cross-pipeline collisions.
+ */
 async function upsertCityMetrics(cityId, patch, options = {}) {
   const ref = db.collection("city_metrics").doc(cityId);
   const safePatch = isPlainObject(patch) ? patch : {};
@@ -90,6 +97,10 @@ async function upsertCityMetrics(cityId, patch, options = {}) {
   return docPatch;
 }
 
+/**
+ * Fetches and normalizes the `city_metrics` document for `cityId`.
+ * Returns a null-filled object (including a derived `costScore`) if the document doesn't exist.
+ */
 async function getCityMetrics(cityId) {
   const snap = await db.collection("city_metrics").doc(cityId).get();
   if (!snap.exists) {
