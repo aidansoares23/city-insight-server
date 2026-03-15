@@ -109,18 +109,18 @@ Uses Node.js's built-in test runner — no external framework needed. All Firest
 
 **138 tests, all passing** across 10 files:
 
-| File                                   | Tests | What it covers                                           |
-| -------------------------------------- | ----- | -------------------------------------------------------- |
-| `test/app.smoke.test.js`               | 11    | HTTP routes, auth, CSRF, account deletion                |
-| `test/lib.numbers.test.js`             | 20    | Numeric utility functions                                |
-| `test/lib.reviews.test.js`             | 20    | Review validation + deterministic ID generation          |
-| `test/middleware.requireAuth.test.js`  | 17    | JWT validation, dev bypass, CSRF-lite                    |
-| `test/utils.cityStats.test.js`         | 24    | Aggregation math + livability formula                    |
-| `test/tasks.safety.test.js`            | 15    | Safety score formula + CSV parsing                       |
-| `test/services.meService.test.js`      | 10    | Account deletion (partial failure recovery), user profile, review list |
-| `test/services.reviewService.test.js`  | 7     | Cursor validation (both directions), review lookup       |
-| `test/services.cityService.test.js`    | 9     | City list — all sort modes, search filter, 404 behaviour |
-| `test/utils.cityMetrics.test.js`       | 5     | Metrics upsert, null-guard, snapshot audit, getCityMetrics |
+| File                                  | Tests | What it covers                                                         |
+| ------------------------------------- | ----- | ---------------------------------------------------------------------- |
+| `test/app.smoke.test.js`              | 11    | HTTP routes, auth, CSRF, account deletion                              |
+| `test/lib.numbers.test.js`            | 20    | Numeric utility functions                                              |
+| `test/lib.reviews.test.js`            | 20    | Review validation + deterministic ID generation                        |
+| `test/middleware.requireAuth.test.js` | 17    | JWT validation, dev bypass, CSRF-lite                                  |
+| `test/utils.cityStats.test.js`        | 24    | Aggregation math + livability formula                                  |
+| `test/tasks.safety.test.js`           | 15    | Safety score formula + CSV parsing                                     |
+| `test/services.meService.test.js`     | 10    | Account deletion (partial failure recovery), user profile, review list |
+| `test/services.reviewService.test.js` | 7     | Cursor validation (both directions), review lookup                     |
+| `test/services.cityService.test.js`   | 9     | City list — all sort modes, search filter, 404 behaviour               |
+| `test/utils.cityMetrics.test.js`      | 5     | Metrics upsert, null-guard, snapshot audit, getCityMetrics             |
 
 CI runs `npm test` on every push and pull request to `main` via GitHub Actions.
 
@@ -153,10 +153,10 @@ Common codes: `NOT_FOUND`, `UNAUTHENTICATED`, `VALIDATION_ERROR`, `CSRF`, `CORS`
 
 **Rate limits:**
 
-| Scope         | Limit              | Response           |
-| ------------- | ------------------ | ------------------ |
-| General API   | 300 req / 15 min per IP | `429 RATE_LIMITED` |
-| Auth endpoints (`/api/auth/*`) | 20 req / 15 min per IP | `429 RATE_LIMITED` |
+| Scope                          | Limit                   | Response           |
+| ------------------------------ | ----------------------- | ------------------ |
+| General API                    | 300 req / 15 min per IP | `429 RATE_LIMITED` |
+| Auth endpoints (`/api/auth/*`) | 20 req / 15 min per IP  | `429 RATE_LIMITED` |
 
 Rate-limited responses include a `Retry-After` header (seconds). The client should back off and retry after that interval.
 
@@ -265,17 +265,17 @@ GET /api/cities/portland-or/reviews?pageSize=10&cursorId=abc123&cursorCreatedAt=
 
 ### Me — `/api/me`
 
-| Method   | Path              | Auth     | Description                                  |
-| -------- | ----------------- | -------- | -------------------------------------------- |
-| `GET`    | `/api/me`         | Required | Current user profile                         |
-| `GET`    | `/api/me/reviews` | Required | All reviews by current user                  |
-| `DELETE` | `/api/me`         | Required | Permanently delete account and all reviews   |
+| Method   | Path              | Auth     | Description                                |
+| -------- | ----------------- | -------- | ------------------------------------------ |
+| `GET`    | `/api/me`         | Required | Current user profile                       |
+| `GET`    | `/api/me/reviews` | Required | All reviews by current user                |
+| `DELETE` | `/api/me`         | Required | Permanently delete account and all reviews |
 
 **`GET /api/me/reviews` query params:**
 
-| Param   | Default | Description                     |
-| ------- | ------- | ------------------------------- |
-| `limit` | `50`    | Max results to return (1–100)   |
+| Param   | Default | Description                   |
+| ------- | ------- | ----------------------------- |
+| `limit` | `50`    | Max results to return (1–100) |
 
 **`DELETE /api/me`** has no body and returns `{ ok: true, deleted: true }` on success. All of the user's reviews are deleted in parallel and city stats are recomputed per review; the user document is always removed even if individual review deletions encounter transient errors. This action is irreversible.
 
@@ -372,7 +372,7 @@ node src/scripts/ci.js --dry-run weekly-refresh
 
 ### Safety Score (0–10)
 
-Derived from FBI UCR crime data. A weighted average of violent (×3) and property (×1) crime is computed over the most recent 3 years, normalized to a per-100k rate, then mapped to a 0–10 scale:
+Derived from California OpenJustice crime data. A weighted average of violent (×3) and property (×1) crime is computed over the most recent 3 years, normalized to a per-100k rate, then mapped to a 0–10 scale:
 
 ```
 weightedAvg       = (violent × 3 + property × 1) / 4   ← per year, averaged over 3 years
@@ -446,14 +446,14 @@ test/                       # Node built-in test runner, all services mocked
 
 ### Firestore collections
 
-| Collection                        | Key                         | Contents                                               |
-| --------------------------------- | --------------------------- | ------------------------------------------------------ |
-| `cities`                          | slug                        | Name, state, lat/lng, tagline, description, highlights |
-| `city_stats`                      | slug                        | Review count, rating sums, livability score            |
-| `city_metrics`                    | slug                        | Population, median rent, safety score, crime index     |
-| `city_metrics/{slug}/snapshots`   | auto-id                     | Immutable audit log written by each pipeline run: pipeline name, syncedAt, prevValues, newValues, changed flag |
-| `reviews`                         | SHA-256(userId:cityId:salt) | Ratings, comment, timestamps                           |
-| `users`                           | Google `sub`                | Profile data from Google                               |
+| Collection                      | Key                         | Contents                                                                                                       |
+| ------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `cities`                        | slug                        | Name, state, lat/lng, tagline, description, highlights                                                         |
+| `city_stats`                    | slug                        | Review count, rating sums, livability score                                                                    |
+| `city_metrics`                  | slug                        | Population, median rent, safety score, crime index                                                             |
+| `city_metrics/{slug}/snapshots` | auto-id                     | Immutable audit log written by each pipeline run: pipeline name, syncedAt, prevValues, newValues, changed flag |
+| `reviews`                       | SHA-256(userId:cityId:salt) | Ratings, comment, timestamps                                                                                   |
+| `users`                         | Google `sub`                | Profile data from Google                                                                                       |
 
 ### Request lifecycle
 
@@ -500,9 +500,9 @@ Client                        Server                       Google
 
 ```js
 const OWNERS = {
-  metricsSync:      new Set(["population", "medianRent"]),
-  safetySync:       new Set(["safetyScore", "crimeIndexPer100k"]),
-  walkabilitySync:  new Set(["walkabilityScore"]),  // ← add this
+  metricsSync: new Set(["population", "medianRent"]),
+  safetySync: new Set(["safetyScore", "crimeIndexPer100k"]),
+  walkabilitySync: new Set(["walkabilityScore"]), // ← add this
 };
 ```
 
