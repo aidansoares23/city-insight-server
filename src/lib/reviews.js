@@ -19,8 +19,8 @@ function makeReviewId(userId, cityId) {
   if (!salt) throw new Error("Missing REVIEW_ID_SALT in env");
 
   return crypto
-    .createHash("sha256")
-    .update(`${userId}:${cityId}:${salt}`)
+    .createHmac("sha256", salt)
+    .update(`${userId}:${cityId}`)
     .digest("hex")
     .slice(0, 32);
 }

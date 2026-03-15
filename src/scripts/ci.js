@@ -9,7 +9,6 @@ const { taskStats } = require("./tasks/stats");
 const { taskLivability } = require("./tasks/livability");
 const { taskCityUpsert } = require("./tasks/cities");
 const { taskRun } = require("./tasks/run");
-const { taskMigrateReviewFields } = require("./tasks/migrateReviewFields");
 
 /** Parses a comma-separated city slug string into a lowercase array, or `null` if empty. */
 function parseCities(val) {
@@ -172,17 +171,6 @@ program
         all: true,
         dryRun: cmd.parent.opts().dryRun,
         verbose: cmd.parent.opts().verbose,
-      }),
-    ),
-  );
-
-program
-  .command("migrate-review-fields")
-  .description("One-time: rename cost→affordability and traffic→walkability on all review docs and city_stats sums")
-  .action((_, cmd) =>
-    withAdmin(() =>
-      taskMigrateReviewFields({
-        dryRun: cmd.parent.opts().dryRun,
       }),
     ),
   );

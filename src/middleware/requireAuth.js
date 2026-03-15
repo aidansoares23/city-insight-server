@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const { NODE_ENV, DEV_AUTH_BYPASS } = require("../config/env");
+const { NODE_ENV, DEV_AUTH_BYPASS, SESSION_JWT_SECRET } = require("../config/env");
 
 /** Returns `true` if `ip` is a loopback address (`127.0.0.1`, `::1`, or `::ffff:127.0.0.1`). */
 function isLocalhostIp(ip) {
@@ -81,15 +81,6 @@ async function requireAuth(req, res, next) {
       return next();
     }
 
-    if (!process.env.SESSION_JWT_SECRET) {
-      return res.status(500).json({
-        error: {
-          code: "SERVER_MISCONFIG",
-          message: "Missing SESSION_JWT_SECRET",
-        },
-      });
-    }
-
     if (!enforceCsrfLite(req, res)) return;
 
     const token = req.cookies?.ci_session;
@@ -101,7 +92,7 @@ async function requireAuth(req, res, next) {
 
     let payload;
     try {
-      payload = jwt.verify(token, process.env.SESSION_JWT_SECRET);
+      payload = jwt.verify(token, SESSION_JWT_SECRET);
     } catch {
       return res.status(401).json({
         error: { code: "UNAUTHENTICATED", message: "Invalid/expired session" },

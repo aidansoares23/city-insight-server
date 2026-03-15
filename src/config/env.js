@@ -19,6 +19,14 @@ if (!REVIEW_ID_SALT) {
   console.warn("REVIEW_ID_SALT is not set. Review ID generation will fail at runtime.");
 }
 
+const SESSION_JWT_SECRET = String(process.env.SESSION_JWT_SECRET || "").trim();
+if (!SESSION_JWT_SECRET) {
+  if (NODE_ENV === "production") {
+    throw new Error("SESSION_JWT_SECRET is required in production. Set this env var before starting.");
+  }
+  console.warn("SESSION_JWT_SECRET is not set. Authentication will fail at runtime.");
+}
+
 // Fail closed: never allow bypass outside dev
 if (NODE_ENV === "production" && DEV_AUTH_BYPASS) {
   throw new Error(
@@ -30,4 +38,5 @@ module.exports = {
   NODE_ENV,
   DEV_AUTH_BYPASS,
   GOOGLE_CLIENT_ID,
+  SESSION_JWT_SECRET,
 };

@@ -51,7 +51,6 @@ app.get("/health", (req, res) => {
     ok: true,
     service: "city-insight-api",
     ts: new Date().toISOString(),
-    env: process.env.NODE_ENV || "development",
   });
 });
 

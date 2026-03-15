@@ -425,7 +425,7 @@ src/
 │   └── cityMetrics.js      # Objective metrics with pipeline ownership model
 ├── lib/                    # Pure utilities
 │   ├── numbers.js          # toNumOrNull, toOptionalNumOrNull, clamp, normalize
-│   ├── reviews.js          # Validation rules, deterministic ID (SHA-256)
+│   ├── reviews.js          # Validation rules, deterministic ID (HMAC-SHA-256)
 │   ├── errors.js           # AppError class
 │   ├── firestore.js        # Timestamp helpers, cursor helpers
 │   ├── meta.js             # Namespaced metadata builder for metrics pipelines
@@ -452,7 +452,7 @@ test/                       # Node built-in test runner, all services mocked
 | `city_stats`                    | slug                        | Review count, rating sums, livability score                                                                    |
 | `city_metrics`                  | slug                        | Population, median rent, safety score, crime index                                                             |
 | `city_metrics/{slug}/snapshots` | auto-id                     | Immutable audit log written by each pipeline run: pipeline name, syncedAt, prevValues, newValues, changed flag |
-| `reviews`                       | SHA-256(userId:cityId:salt) | Ratings, comment, timestamps                                                                                   |
+| `reviews`                       | HMAC-SHA-256(key=salt, msg=userId:cityId) | Ratings, comment, timestamps                                                                                   |
 | `users`                         | Google `sub`                | Profile data from Google                                                                                       |
 
 ### Request lifecycle
