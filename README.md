@@ -4,24 +4,16 @@ REST API backend for City Insight, a platform where users discover cities, brows
 
 ---
 
-## Tech stack
-
-| Layer       | Technology                                  |
-| ----------- | ------------------------------------------- |
-| Runtime     | Node.js 18+                                 |
-| Framework   | Express 5                                   |
-| Database    | Firestore (Firebase Admin SDK)              |
-| Auth        | Google OAuth 2.0 + JWT session cookie       |
-| Rate limiting | express-rate-limit                        |
-| Admin CLI   | Commander.js                                |
-| Testing     | Node.js built-in test runner                |
-| Hosting     | Render                                      |
-
----
-
 ## Table of Contents
 
+- [What it does](#what-it-does)
 - [Tech stack](#tech-stack)
+- [Architecture](#architecture)
+  - [Project structure](#project-structure)
+  - [Firestore collections](#firestore-collections)
+  - [Request lifecycle](#request-lifecycle)
+  - [Auth flow](#auth-flow)
+  - [Adding a new metric pipeline](#adding-a-new-metric-pipeline)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
 - [Running the Server](#running-the-server)
@@ -29,10 +21,153 @@ REST API backend for City Insight, a platform where users discover cities, brows
 - [API Reference](#api-reference)
 - [Admin CLI](#admin-cli)
 - [Scoring System](#scoring-system)
-- [Architecture](#architecture)
-  - [Request lifecycle](#request-lifecycle)
-  - [Auth flow](#auth-flow)
-  - [Adding a new metric pipeline](#adding-a-new-metric-pipeline)
+
+---
+
+## What it does
+
+- **City data** — serves California cities with livability scores, objective metrics (population, median rent, safety score), and search/sort support
+- **Reviews** — authenticated users create, update, and delete 1–10 ratings across safety, affordability, walkability, and cleanliness; livability scores recompute atomically on every write
+- **Auth** — Google OAuth 2.0 login issues a signed JWT stored as an `httpOnly` session cookie; no tokens in localStorage
+- **Data pipelines** — admin CLI syncs Census ACS metrics, parses crime CSVs into safety scores, and recomputes livability across all cities
+- **Rate limiting and CSRF** — per-IP rate limits on all routes and auth endpoints; CSRF-lite via `X-Requested-With` header on state-changing requests
+
+---
+
+## Tech stack
+
+| Layer         | Technology                            |
+| ------------- | ------------------------------------- |
+| Runtime       | Node.js 18+                           |
+| Framework     | Express 5                             |
+| Database      | Firestore (Firebase Admin SDK)        |
+| Auth          | Google OAuth 2.0 + JWT session cookie |
+| Rate limiting | express-rate-limit                    |
+| Admin CLI     | Commander.js                          |
+| Testing       | Node.js built-in test runner          |
+| Hosting       | Render                                |
+
+---
+
+## Architecture
+
+### Project structure
+
+```
+src/
+├── app.js                  # Express app: middleware, CORS, route mounting
+├── index.js                # Entry point (binds port)
+├── config/
+│   ├── env.js              # Env var validation and export
+│   └── firebase.js         # Firebase Admin SDK init
+├── routes/                 # Thin route layer — wires URLs to controllers
+│   ├── authRoutes.js
+│   ├── cityRoutes.js
+│   └── meRoutes.js
+├── controllers/            # HTTP layer — parses requests, calls services
+│   ├── cityController.js
+│   ├── reviewController.js
+│   └── meController.js
+├── services/               # Business logic + Firestore transactions
+│   ├── cityService.js      # City list (search/sort/paginate), details
+│   ├── reviewService.js    # Upsert/delete with atomic stats recomputation
+│   └── meService.js        # User profile, review history
+├── middleware/
+│   ├── requireAuth.js      # JWT validation, CSRF-lite, dev bypass
+│   └── errorHandlers.js    # 404 handler + central error formatter
+├── utils/
+│   ├── cityStats.js        # Aggregation math, livability formula (v0)
+│   └── cityMetrics.js      # Objective metrics with pipeline ownership model
+├── lib/                    # Pure utilities
+│   ├── numbers.js          # toNumOrNull, toOptionalNumOrNull, clamp, normalize
+│   ├── reviews.js          # Validation rules, deterministic ID (HMAC-SHA-256)
+│   ├── errors.js           # AppError class
+│   ├── firestore.js        # Timestamp helpers, cursor helpers
+│   ├── meta.js             # Namespaced metadata builder for metrics pipelines
+│   ├── objects.js          # isPlainObject
+│   └── slugs.js            # Slug normalization
+└── scripts/
+    ├── ci.js               # Admin CLI entrypoint (Commander.js)
+    └── tasks/
+        ├── cities.js       # city-upsert task
+        ├── metrics.js      # ACS Census sync
+        ├── safety.js       # Crime CSV → safety scores
+        ├── stats.js        # Review aggregate recomputation
+        ├── livability.js   # Livability score recomputation
+        └── run.js          # Pipeline orchestrator
+
+test/                       # Node built-in test runner, all services mocked
+```
+
+### Firestore collections
+
+| Collection                      | Key                                      | Contents                                                                                                       |
+| ------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `cities`                        | slug                                     | Name, state, lat/lng, tagline, description, highlights                                                         |
+| `city_stats`                    | slug                                     | Review count, rating sums, livability score                                                                    |
+| `city_metrics`                  | slug                                     | Population, median rent, safety score, crime index                                                             |
+| `city_metrics/{slug}/snapshots` | auto-id                                  | Immutable audit log written by each pipeline run: pipeline name, syncedAt, prevValues, newValues, changed flag |
+| `reviews`                       | HMAC-SHA-256(key=salt, msg=userId:cityId) | Ratings, comment, timestamps                                                                                   |
+| `users`                         | Google `sub`                             | Profile data from Google                                                                                       |
+
+### Request lifecycle
+
+A request travels through four layers:
+
+```
+routes/        Declares the URL pattern and attaches middleware (requireAuth)
+controllers/   Parses + validates the HTTP request, calls a service, shapes the response
+services/      Business logic, Firestore reads/writes, transactions
+lib/ + utils/  Pure functions — no I/O, fully unit-testable
+```
+
+**Adding a new endpoint:**
+
+1. Add the route in the appropriate `routes/` file.
+2. Write a controller function that validates input and calls a service.
+3. Write (or extend) the service function for the business logic.
+4. Add unit tests in `test/` — mock the Firestore calls with the existing pattern.
+
+### Auth flow
+
+```
+Client                        Server                       Google
+  │── POST /api/auth/login ──▶ │                              │
+  │   { idToken }              │── verifyIdToken() ─────────▶ │
+  │                            │◀── verified claims ───────── │
+  │                            │  sign session JWT (7d)       │
+  │◀── Set-Cookie: ci_session ─│                              │
+  │    (httpOnly, secure)      │                              │
+  │                            │                              │
+  │── GET /api/me ────────────▶│                              │
+  │   Cookie: ci_session       │  jwt.verify()                │
+  │                            │  req.user = { sub, ... }     │
+  │◀── { user: {...} } ────────│                              │
+```
+
+### Adding a new metric pipeline
+
+`city_metrics` uses an ownership model to prevent pipelines from clobbering each other's fields. Each pipeline declares which fields it owns; writes outside that set are silently dropped.
+
+**To add a new pipeline (e.g. `walkabilitySync` that writes `walkabilityScore`):**
+
+1. Register it in `utils/cityMetrics.js`:
+
+```js
+const OWNERS = {
+  metricsSync: new Set(["population", "medianRent"]),
+  safetySync: new Set(["safetyScore", "crimeIndexPer100k"]),
+  walkabilitySync: new Set(["walkabilityScore"]), // ← add this
+};
+```
+
+2. Write a task in `src/scripts/tasks/` that calls `upsertCityMetrics(cityId, patch, { owner: "walkabilitySync" })`.
+
+3. Wire the task into `src/scripts/tasks/run.js` and the CLI in `src/scripts/ci.js`.
+
+4. If the new score should affect livability, update `computeLivabilityV0` in `utils/cityStats.js` and adjust the weights (they are renormalized automatically when signals are missing, so existing cities without the new data won't break).
+
+Each pipeline run writes an immutable snapshot to `city_metrics/{slug}/snapshots` recording what changed, so you can audit or roll back individual pipeline updates.
 
 ---
 
@@ -83,16 +218,16 @@ DEV_AUTH_BYPASS=false
 
 ## Environment Variables
 
-| Variable                       | Required      | Description                                                                 |
-| ------------------------------ | ------------- | --------------------------------------------------------------------------- |
+| Variable                        | Required      | Description                                                                 |
+| ------------------------------- | ------------- | --------------------------------------------------------------------------- |
 | `FIREBASE_SERVICE_ACCOUNT_PATH` | Yes           | Absolute path to your Firebase service account JSON key                     |
-| `SESSION_JWT_SECRET`           | Yes           | Secret used to sign session JWTs. Generate with `openssl rand -hex 32`      |
-| `REVIEW_ID_SALT`               | Yes           | Salt for deterministic review ID generation. **Never change after launch.** |
-| `GOOGLE_CLIENT_ID`             | Yes           | OAuth 2.0 client ID from Google Cloud Console                               |
-| `PORT`                         | No (def 3000) | Port the server listens on                                                  |
-| `NODE_ENV`                     | No (def dev)  | `development` or `production`                                               |
-| `CLIENT_ORIGINS`               | No            | Comma-separated allowed CORS origins (def `http://localhost:5173`)          |
-| `DEV_AUTH_BYPASS`              | No            | `true` to skip Google auth locally. Localhost-only; hard-blocked in prod    |
+| `SESSION_JWT_SECRET`            | Yes           | Secret used to sign session JWTs. Generate with `openssl rand -hex 32`      |
+| `REVIEW_ID_SALT`                | Yes           | Salt for deterministic review ID generation. **Never change after launch.** |
+| `GOOGLE_CLIENT_ID`              | Yes           | OAuth 2.0 client ID from Google Cloud Console                               |
+| `PORT`                          | No (def 3000) | Port the server listens on                                                  |
+| `NODE_ENV`                      | No (def dev)  | `development` or `production`                                               |
+| `CLIENT_ORIGINS`                | No            | Comma-separated allowed CORS origins (def `http://localhost:5173`)          |
+| `DEV_AUTH_BYPASS`               | No            | `true` to skip Google auth locally. Localhost-only; hard-blocked in prod    |
 
 ---
 
@@ -421,123 +556,3 @@ A weighted blend of up to three signals. Missing signals are dropped and the rem
 | Rent affordability | **15%** | `(1 − medianRent / $3,500) × 100`, clamped 0–100 |
 
 **Livability recalculates automatically** whenever a review is created, updated, or deleted — the stats update and livability recomputation happen atomically in the same Firestore transaction.
-
----
-
-## Architecture
-
-```
-src/
-├── app.js                  # Express app: middleware, CORS, route mounting
-├── index.js                # Entry point (binds port)
-├── config/
-│   ├── env.js              # Env var validation and export
-│   └── firebase.js         # Firebase Admin SDK init
-├── routes/                 # Thin route layer — wires URLs to controllers
-│   ├── authRoutes.js
-│   ├── cityRoutes.js
-│   └── meRoutes.js
-├── controllers/            # HTTP layer — parses requests, calls services
-│   ├── cityController.js
-│   ├── reviewController.js
-│   └── meController.js
-├── services/               # Business logic + Firestore transactions
-│   ├── cityService.js      # City list (search/sort/paginate), details
-│   ├── reviewService.js    # Upsert/delete with atomic stats recomputation
-│   └── meService.js        # User profile, review history
-├── middleware/
-│   ├── requireAuth.js      # JWT validation, CSRF-lite, dev bypass
-│   └── errorHandlers.js    # 404 handler + central error formatter
-├── utils/
-│   ├── cityStats.js        # Aggregation math, livability formula (v0)
-│   └── cityMetrics.js      # Objective metrics with pipeline ownership model
-├── lib/                    # Pure utilities
-│   ├── numbers.js          # toNumOrNull, toOptionalNumOrNull, clamp, normalize
-│   ├── reviews.js          # Validation rules, deterministic ID (HMAC-SHA-256)
-│   ├── errors.js           # AppError class
-│   ├── firestore.js        # Timestamp helpers, cursor helpers
-│   ├── meta.js             # Namespaced metadata builder for metrics pipelines
-│   ├── objects.js          # isPlainObject
-│   └── slugs.js            # Slug normalization
-└── scripts/
-    ├── ci.js               # Admin CLI entrypoint (Commander.js)
-    └── tasks/
-        ├── cities.js       # city-upsert task
-        ├── metrics.js      # ACS Census sync
-        ├── safety.js       # Crime CSV → safety scores
-        ├── stats.js        # Review aggregate recomputation
-        ├── livability.js   # Livability score recomputation
-        └── run.js          # Pipeline orchestrator
-
-test/                       # Node built-in test runner, all services mocked
-```
-
-### Firestore collections
-
-| Collection                      | Key                         | Contents                                                                                                       |
-| ------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `cities`                        | slug                        | Name, state, lat/lng, tagline, description, highlights                                                         |
-| `city_stats`                    | slug                        | Review count, rating sums, livability score                                                                    |
-| `city_metrics`                  | slug                        | Population, median rent, safety score, crime index                                                             |
-| `city_metrics/{slug}/snapshots` | auto-id                     | Immutable audit log written by each pipeline run: pipeline name, syncedAt, prevValues, newValues, changed flag |
-| `reviews`                       | HMAC-SHA-256(key=salt, msg=userId:cityId) | Ratings, comment, timestamps                                                                                   |
-| `users`                         | Google `sub`                | Profile data from Google                                                                                       |
-
-### Request lifecycle
-
-A request travels through four layers:
-
-```
-routes/        Declares the URL pattern and attaches middleware (requireAuth)
-controllers/   Parses + validates the HTTP request, calls a service, shapes the response
-services/      Business logic, Firestore reads/writes, transactions
-lib/ + utils/  Pure functions — no I/O, fully unit-testable
-```
-
-**Adding a new endpoint:**
-
-1. Add the route in the appropriate `routes/` file.
-2. Write a controller function that validates input and calls a service.
-3. Write (or extend) the service function for the business logic.
-4. Add unit tests in `test/` — mock the Firestore calls with the existing pattern.
-
-### Auth flow
-
-```
-Client                        Server                       Google
-  │── POST /api/auth/login ──▶ │                              │
-  │   { idToken }              │── verifyIdToken() ─────────▶ │
-  │                            │◀── verified claims ───────── │
-  │                            │  sign session JWT (7d)       │
-  │◀── Set-Cookie: ci_session ─│                              │
-  │    (httpOnly, secure)      │                              │
-  │                            │                              │
-  │── GET /api/me ────────────▶│                              │
-  │   Cookie: ci_session       │  jwt.verify()                │
-  │                            │  req.user = { sub, ... }     │
-  │◀── { user: {...} } ────────│                              │
-```
-
-### Adding a new metric pipeline
-
-`city_metrics` uses an ownership model to prevent pipelines from clobbering each other's fields. Each pipeline declares which fields it owns; writes outside that set are silently dropped.
-
-**To add a new pipeline (e.g. `walkabilitySync` that writes `walkabilityScore`):**
-
-1. Register it in `utils/cityMetrics.js`:
-
-```js
-const OWNERS = {
-  metricsSync: new Set(["population", "medianRent"]),
-  safetySync: new Set(["safetyScore", "crimeIndexPer100k"]),
-  walkabilitySync: new Set(["walkabilityScore"]), // ← add this
-};
-```
-
-2. Write a task in `src/scripts/tasks/` that calls `upsertCityMetrics(cityId, patch, { owner: "walkabilitySync" })`.
-
-3. Wire the task into `src/scripts/tasks/run.js` and the CLI in `src/scripts/ci.js`.
-
-4. If the new score should affect livability, update `computeLivabilityV0` in `utils/cityStats.js` and adjust the weights (they are renormalized automatically when signals are missing, so existing cities without the new data won't break).
-
-Each pipeline run writes an immutable snapshot to `city_metrics/{slug}/snapshots` recording what changed, so you can audit or roll back individual pipeline updates.
