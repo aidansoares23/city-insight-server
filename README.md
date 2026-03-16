@@ -2,13 +2,26 @@
 
 REST API backend for City Insight, a platform where users discover cities, browse livability scores, and write reviews.
 
-**Stack:** Node.js 18+, Express 5, Firestore, Google OAuth 2.0, JWT cookie sessions
-**Deployed on:** Render
+---
+
+## Tech stack
+
+| Layer       | Technology                                  |
+| ----------- | ------------------------------------------- |
+| Runtime     | Node.js 18+                                 |
+| Framework   | Express 5                                   |
+| Database    | Firestore (Firebase Admin SDK)              |
+| Auth        | Google OAuth 2.0 + JWT session cookie       |
+| Rate limiting | express-rate-limit                        |
+| Admin CLI   | Commander.js                                |
+| Testing     | Node.js built-in test runner                |
+| Hosting     | Render                                      |
 
 ---
 
 ## Table of Contents
 
+- [Tech stack](#tech-stack)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
 - [Running the Server](#running-the-server)
