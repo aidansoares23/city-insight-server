@@ -5,9 +5,10 @@ const { initAdmin } = require("./lib/initAdmin");
 // Tasks
 const { taskMetrics } = require("./tasks/metrics");
 const { taskSafety } = require("./tasks/safety");
+const { taskSafetyApi } = require("./tasks/safetyApi");
 const { taskStats } = require("./tasks/stats");
 const { taskLivability } = require("./tasks/livability");
-const { taskCityUpsert } = require("./tasks/cities");
+const { taskCityUpsert, taskCityUpsertBatch } = require("./tasks/cities");
 const { taskRun } = require("./tasks/run");
 
 /** Parses a comma-separated city slug string into a lowercase array, or `null` if empty. */
@@ -50,8 +51,22 @@ program
   );
 
 program
+  .command("safety-api")
+  .description("Sync safety scores from FBI Crime Data Explorer API")
+  .option("--cities <slugs>", "comma-separated city ids")
+  .action((opts, cmd) =>
+    withAdmin(() =>
+      taskSafetyApi({
+        cities: parseCities(opts.cities),
+        dryRun: cmd.parent.opts().dryRun,
+        verbose: cmd.parent.opts().verbose,
+      }),
+    ),
+  );
+
+program
   .command("safety")
-  .description("Sync safety from per-city CSV files")
+  .description("Sync safety from per-city CSV files (legacy)")
   .option("--dir <path>", "directory containing CSV files", null)
   .action((opts, cmd) =>
     withAdmin(() =>
@@ -92,6 +107,19 @@ program
         city: opts.city ? String(opts.city).trim().toLowerCase() : null,
         dryRun: cmd.parent.opts().dryRun,
         verbose: cmd.parent.opts().verbose,
+      }),
+    ),
+  );
+
+program
+  .command("city-upsert-batch")
+  .description("Batch create/update cities from a JSON file")
+  .requiredOption("--file <path>", "path to JSON file containing array of city objects")
+  .action((opts, cmd) =>
+    withAdmin(() =>
+      taskCityUpsertBatch({
+        file: opts.file,
+        dryRun: cmd.parent.opts().dryRun,
       }),
     ),
   );

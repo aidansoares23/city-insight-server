@@ -34,9 +34,15 @@ if (NODE_ENV === "production" && DEV_AUTH_BYPASS) {
   );
 }
 
+const FBI_API_KEY = String(process.env.FBI_API_KEY || "").trim();
+if (!FBI_API_KEY) {
+  console.warn("FBI_API_KEY is not set. FBI crime data sync will fail.");
+}
+
 module.exports = {
   NODE_ENV,
   DEV_AUTH_BYPASS,
   GOOGLE_CLIENT_ID,
   SESSION_JWT_SECRET,
+  FBI_API_KEY,
 };

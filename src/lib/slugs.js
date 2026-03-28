@@ -11,4 +11,22 @@ function censusNameToSlug(name) {
   return withoutSuffix.toLowerCase().replace(/\s+/g, "-") + "-ca";
 }
 
-module.exports = { censusNameToSlug };
+/**
+ * Converts a Census "NAME" field and 2-letter state abbreviation into a slug.
+ * Strips the place type suffix (city, town, village, CDP) and state name.
+ * Example: ("Portland city, Oregon", "OR") -> "portland-or"
+ * @param {string} name - Census NAME field value
+ * @param {string} stateAbbr - 2-letter state abbreviation, e.g. "OR"
+ * @returns {string}
+ */
+function censusNameToStateSlug(name, stateAbbr) {
+  const abbr = String(stateAbbr).trim().toLowerCase();
+  const withoutSuffix = String(name)
+    .trim()
+    .replace(/\s+(city|town|village|CDP)\s*,\s*[^,]+$/i, "")
+    .replace(/\s*,\s*[^,]+$/, ""); // strip ", StateName"
+
+  return withoutSuffix.toLowerCase().replace(/\s+/g, "-") + "-" + abbr;
+}
+
+module.exports = { censusNameToSlug, censusNameToStateSlug };

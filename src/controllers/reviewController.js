@@ -10,9 +10,10 @@ const {
 } = require("../lib/reviews");
 
 const reviewService = require("../services/reviewService");
+const reactionService = require("../services/reactionService");
 
 /** Shapes a Firestore review document into the public API response format with ISO timestamps. */
-function toReview(docId, data) {
+function toReview(docId, data, reactions = null) {
   return withIsoTimestamps({
     id: docId,
     cityId: data.cityId,
@@ -21,6 +22,7 @@ function toReview(docId, data) {
     isEdited: data.isEdited ?? false,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
+    reactions: reactions ?? { helpful: 0, agree: 0, disagree: 0 },
   });
 }
 
@@ -85,7 +87,28 @@ async function listReviewsForCity(req, res, next) {
       cursor,
     });
 
-    const reviews = docs.map((doc) => toReview(doc.id, doc.data()));
+    const reviewIds = docs.map((doc) => doc.id);
+
+    // Fetch reaction counts for all reviews in parallel
+    const [countsList, myReactionsMap] = await Promise.all([
+      Promise.all(
+        reviewIds.map((reviewId) =>
+          reactionService.getReactionCountsForReview({ reviewId }),
+        ),
+      ),
+      req.user
+        ? reactionService.getMyReactionsForReviews({
+            userId: req.user.sub,
+            reviewIds,
+          })
+        : Promise.resolve(new Map()),
+    ]);
+
+    const reviews = docs.map((doc, i) => ({
+      ...toReview(doc.id, doc.data(), countsList[i]),
+      myReaction: myReactionsMap.get(doc.id) ?? null,
+    }));
+
     const nextCursor = docs.length
       ? buildNextCursorFromDoc(docs[docs.length - 1])
       : null;

@@ -98,6 +98,11 @@ async function deleteAccount({ userId }) {
     );
   }
 
+  // Delete favorites subcollection. Firestore doesn't cascade-delete subcollections,
+  // so we must do it explicitly before removing the parent document.
+  const favSnap = await db.collection("users").doc(uid).collection("favorites").get();
+  await Promise.allSettled(favSnap.docs.map((doc) => doc.ref.delete()));
+
   // Delete the user document regardless — a partially cleaned up account is
   // far better than a permanently blocked deletion.
   await db.collection("users").doc(uid).delete();
@@ -105,4 +110,60 @@ async function deleteAccount({ userId }) {
   return { deleted: true };
 }
 
-module.exports = { upsertMeFromAuthClaims, listMyReviews, deleteAccount };
+/**
+ * Returns all cities favorited by `userId`, ordered by most recently added.
+ * @param {{ userId: string }} options
+ * @returns {Promise<{ cityId: string, createdAt: string|null }[]>}
+ */
+async function listMyFavorites({ userId }) {
+  const uid = String(userId || "").trim();
+  if (!uid) throw new AppError("Missing user identity", { status: 401, code: "UNAUTHENTICATED" });
+
+  const snap = await db
+    .collection("users")
+    .doc(uid)
+    .collection("favorites")
+    .orderBy("createdAt", "desc")
+    .get();
+
+  return snap.docs.map((d) => ({
+    cityId: d.id,
+    createdAt: tsToIso(d.data()?.createdAt),
+  }));
+}
+
+/**
+ * Adds a city to the user's favorites (idempotent).
+ * @param {{ userId: string, citySlug: string }} options
+ * @returns {Promise<{ cityId: string }>}
+ */
+async function addFavorite({ userId, citySlug }) {
+  const uid = String(userId || "").trim();
+  const slug = String(citySlug || "").trim();
+  if (!uid) throw new AppError("Missing user identity", { status: 401, code: "UNAUTHENTICATED" });
+  if (!slug) throw new AppError("Missing city slug", { status: 400, code: "INVALID_INPUT" });
+
+  const ref = db.collection("users").doc(uid).collection("favorites").doc(slug);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    await ref.set({ cityId: slug, ...serverTimestamps() });
+  }
+  return { cityId: slug };
+}
+
+/**
+ * Removes a city from the user's favorites (idempotent).
+ * @param {{ userId: string, citySlug: string }} options
+ * @returns {Promise<{ deleted: true }>}
+ */
+async function removeFavorite({ userId, citySlug }) {
+  const uid = String(userId || "").trim();
+  const slug = String(citySlug || "").trim();
+  if (!uid) throw new AppError("Missing user identity", { status: 401, code: "UNAUTHENTICATED" });
+  if (!slug) throw new AppError("Missing city slug", { status: 400, code: "INVALID_INPUT" });
+
+  await db.collection("users").doc(uid).collection("favorites").doc(slug).delete();
+  return { deleted: true };
+}
+
+module.exports = { upsertMeFromAuthClaims, listMyReviews, deleteAccount, listMyFavorites, addFavorite, removeFavorite };
