@@ -5,6 +5,9 @@ const {
   listCities,
   getCityBySlug,
   getCityDetails,
+  getCityAttractions,
+  getCitySummary,
+  recommendCities,
 } = require("../controllers/cityController");
 
 const {
@@ -25,8 +28,11 @@ const { upsertReaction, deleteReaction } = require("../controllers/reactionContr
  * -------------------------
  */
 router.get("/", listCities);
+router.post("/recommend", recommendCities);
 router.get("/:slug", getCityBySlug);
 router.get("/:slug/details", getCityDetails);
+router.get("/:slug/attractions", getCityAttractions);
+router.get("/:slug/summary", getCitySummary);
 
 /**
  * -------------------------

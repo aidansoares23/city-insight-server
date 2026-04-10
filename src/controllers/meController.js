@@ -72,4 +72,16 @@ async function removeFavorite(req, res, next) {
   }
 }
 
-module.exports = { getMe, listMyReviews, deleteAccount, listMyFavorites, addFavorite, removeFavorite };
+/** Updates the authenticated user's display name. */
+async function updateProfile(req, res, next) {
+  try {
+    const userId = req.user.sub;
+    const { displayName } = req.body;
+    const result = await meService.updateProfile({ userId, displayName });
+    res.json({ ok: true, user: { id: userId, sub: userId, ...result.user } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getMe, listMyReviews, deleteAccount, listMyFavorites, addFavorite, removeFavorite, updateProfile };

@@ -2,6 +2,11 @@ const { FBI_API_KEY } = require("../config/env");
 
 const FBI_BASE = "https://api.usa.gov/crime/fbi/cde";
 
+/** Common request headers for all FBI CDE API calls. */
+function fbiFetchHeaders() {
+  return FBI_API_KEY ? { "X-API-Key": FBI_API_KEY } : {};
+}
+
 /**
  * Fetches and flattens all law enforcement agencies for a given state.
  * The FBI API returns { [county]: [agency, ...] }; this flattens it to a plain array.
@@ -13,8 +18,8 @@ async function fetchAgenciesByState(stateAbbr) {
   if (typeof globalThis.fetch !== "function") {
     throw new Error("Global fetch is unavailable. Use Node.js 18+.");
   }
-  const url = `${FBI_BASE}/agency/byStateAbbr/${encodeURIComponent(stateAbbr)}?API_KEY=${FBI_API_KEY}`;
-  const res = await globalThis.fetch(url);
+  const url = `${FBI_BASE}/agency/byStateAbbr/${encodeURIComponent(stateAbbr)}`;
+  const res = await globalThis.fetch(url, { headers: fbiFetchHeaders() });
   if (!res.ok) {
     throw new Error(`FBI agencies API failed (${stateAbbr}): HTTP ${res.status}`);
   }
@@ -47,9 +52,9 @@ async function fetchOffenseRates(ori, offenseType, agencyName, fromYear = 2020, 
   }
   const from = `01-${fromYear}`;
   const to   = `12-${toYear}`;
-  const url  = `${FBI_BASE}/summarized/agency/${encodeURIComponent(ori)}/${encodeURIComponent(offenseType)}?from=${from}&to=${to}&API_KEY=${FBI_API_KEY}`;
+  const url  = `${FBI_BASE}/summarized/agency/${encodeURIComponent(ori)}/${encodeURIComponent(offenseType)}?from=${from}&to=${to}`;
 
-  const res = await globalThis.fetch(url);
+  const res = await globalThis.fetch(url, { headers: fbiFetchHeaders() });
   if (!res.ok) {
     throw new Error(`FBI offenses API failed (${ori} / ${offenseType}): HTTP ${res.status}`);
   }

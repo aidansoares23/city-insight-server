@@ -22,16 +22,32 @@ async function upsertMeFromAuthClaims(userClaims) {
     email: userClaims.email || null,
     displayName: userClaims.name || null,
     picture: userClaims.picture || null,
+    emailVerified: userClaims.emailVerified ?? false,
   };
 
   if (!snap.exists) {
     await userRef.set({ ...base, ...serverTimestamps() }, { merge: true });
-  } else {
+    const savedSnap = await userRef.get();
+    return { created: true, user: savedSnap.data() || null, sub };
+  }
+
+  // Only write if a claim field has actually changed — avoids a Firestore write on every GET /me
+  const existing = snap.data() || {};
+  const existingCustomized = existing?.displayNameCustomized === true;
+  if (existingCustomized) {
+    base.displayName = existing.displayName;
+  }
+  const changed =
+    existing.email !== base.email ||
+    (!existingCustomized && existing.displayName !== base.displayName) ||
+    existing.picture !== base.picture ||
+    existing.emailVerified !== base.emailVerified;
+
+  if (changed) {
     await userRef.set({ ...base, ...updatedTimestamp() }, { merge: true });
   }
 
-  const savedSnap = await userRef.get();
-  return { created: !snap.exists, user: savedSnap.data() || null, sub };
+  return { created: false, user: changed ? (await userRef.get()).data() || null : existing, sub };
 }
 
 /**
@@ -166,4 +182,22 @@ async function removeFavorite({ userId, citySlug }) {
   return { deleted: true };
 }
 
-module.exports = { upsertMeFromAuthClaims, listMyReviews, deleteAccount, listMyFavorites, addFavorite, removeFavorite };
+/**
+ * Updates the user's display name, marking it as customized so Google sync won't overwrite it.
+ * @param {{ userId: string, displayName: string }} options
+ * @returns {Promise<{ user: object }>}
+ */
+async function updateProfile({ userId, displayName }) {
+  const uid = String(userId || "").trim();
+  if (!uid) throw new AppError("Missing user identity", { status: 401, code: "UNAUTHENTICATED" });
+  const name = String(displayName || "").trim();
+  if (!name || name.length > 50) throw new AppError("Display name must be 1–50 characters", { status: 400, code: "INVALID_INPUT" });
+  const ref = db.collection("users").doc(uid);
+  const patch = { displayName: name, displayNameCustomized: true, ...updatedTimestamp() };
+  await ref.set(patch, { merge: true });
+  // Return the known update shape rather than re-reading from Firestore, which
+  // avoids an extra RPC and prevents an unwrapped Firestore error on the re-read.
+  return { user: { displayName: name, displayNameCustomized: true } };
+}
+
+module.exports = { upsertMeFromAuthClaims, listMyReviews, deleteAccount, listMyFavorites, addFavorite, removeFavorite, updateProfile };

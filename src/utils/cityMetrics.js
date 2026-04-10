@@ -10,8 +10,9 @@ const { buildNamespacedMetaUpdate } = require("../lib/meta");
 
 // Each pipeline owns a specific set of fields — prevents cross-pipeline overwrites.
 const OWNERS = {
-  metricsSync: new Set(["population", "medianRent"]),
-  safetySync:  new Set(["safetyScore", "crimeIndexPer100k"]),
+  metricsSync:     new Set(["population", "medianRent"]),
+  safetySync:      new Set(["safetyScore", "crimeIndexPer100k"]),
+  airQualitySync:  new Set(["aqiValue", "pm25Avg"]),
 };
 
 const METRIC_FIELDS = [
@@ -19,6 +20,8 @@ const METRIC_FIELDS = [
   { key: "population",         normalize: toNumOrNull },
   { key: "safetyScore",        normalize: normalizeSafetyTo10 },
   { key: "crimeIndexPer100k",  normalize: toNumOrNull },
+  { key: "aqiValue",           normalize: toNumOrNull },
+  { key: "pm25Avg",            normalize: toNumOrNull },
 ];
 
 /** Filters `patch` to only include fields in `allowedSet`, plus `meta` if present (always passed through). */
@@ -120,11 +123,13 @@ async function getCityMetrics(cityId) {
   return {
     cityId,
     medianRent,
-    costScore:        medianRentToAffordability10(medianRent),
-    population:       toNumOrNull(metricsData.population),
-    safetyScore:      normalizeSafetyTo10(metricsData.safetyScore),
+    costScore:         medianRentToAffordability10(medianRent),
+    population:        toNumOrNull(metricsData.population),
+    safetyScore:       normalizeSafetyTo10(metricsData.safetyScore),
     crimeIndexPer100k: toNumOrNull(metricsData.crimeIndexPer100k),
-    meta:             isPlainObject(metricsData.meta) ? metricsData.meta : null,
+    aqiValue:          toNumOrNull(metricsData.aqiValue),
+    pm25Avg:           toNumOrNull(metricsData.pm25Avg),
+    meta:              isPlainObject(metricsData.meta) ? metricsData.meta : null,
   };
 }
 

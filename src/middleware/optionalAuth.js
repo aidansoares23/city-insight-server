@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
-const { NODE_ENV, DEV_AUTH_BYPASS, SESSION_JWT_SECRET } = require("../config/env");
+const { SESSION_JWT_SECRET } = require("../config/env");
+const { isBypassEnabled, resolveDevBypassUser } = require("./authHelpers");
 
 /**
  * Express middleware that optionally authenticates a request.
@@ -10,16 +11,8 @@ const { NODE_ENV, DEV_AUTH_BYPASS, SESSION_JWT_SECRET } = require("../config/env
  */
 async function optionalAuth(req, res, next) {
   try {
-    const isProd = NODE_ENV === "production";
-    const bypassEnabled = !isProd && String(DEV_AUTH_BYPASS).toLowerCase() === "true";
-
-    if (bypassEnabled) {
-      const devUser = String(req.header("x-dev-user") || "").trim();
-      if (devUser && devUser.length <= 128) {
-        req.user = { sub: devUser, isDevBypass: true };
-      } else {
-        req.user = null;
-      }
+    if (isBypassEnabled()) {
+      req.user = resolveDevBypassUser(req) ?? null;
       return next();
     }
 

@@ -1,25 +1,13 @@
 const { db } = require("../../config/firebase");
 const { fetchAgenciesByState, fetchOffenseRates } = require("../../services/fbiService");
 const { upsertCityMetrics } = require("../../utils/cityMetrics");
-const { recomputeCityLivability } = require("../../utils/cityStats");
-const { clamp0to10, toNumOrNull } = require("../../lib/numbers");
+const { toNumOrNull } = require("../../lib/numbers");
+const { YEARS_TO_AVG, WEIGHT_VIOLENT, WEIGHT_PROPERTY, computeSafetyScore } = require("../lib/safetyCalibration");
 
-// Match the existing safety.js calibration for score consistency.
-const YEARS_TO_AVG    = 3;
-const WEIGHT_VIOLENT  = 3;
-const WEIGHT_PROPERTY = 1;
-const RATE_AT_ZERO    = 2500; // per-100k weighted avg that maps to safetyScore = 0
-const FROM_YEAR       = 2020;
-const TO_YEAR         = 2023;
+const FROM_YEAR = 2020;
+const TO_YEAR   = 2023;
 
 const PIPELINE_VERSION = "syncSafetyFromFbi:v1";
-
-/** Converts crimeIndexPer100k -> safety score (0–10). */
-function computeSafetyScore(crimeIndexPer100k) {
-  if (!Number.isFinite(crimeIndexPer100k)) return null;
-  const raw = 10 - (crimeIndexPer100k / RATE_AT_ZERO) * 10;
-  return Math.round(clamp0to10(raw) * 10) / 10;
-}
 
 /**
  * Averages monthly per-100k rates across the most recent `n` calendar years.
@@ -176,7 +164,6 @@ async function taskSafetyApi({ cities, dryRun = false, verbose = false } = {}) {
         console.log(`[dry-run][safety-api] would upsert ${city.id}`, patch);
       } else {
         await upsertCityMetrics(city.id, patch, { owner: "safetySync" });
-        await recomputeCityLivability(city.id);
       }
 
       touchedCityIds.push(city.id);

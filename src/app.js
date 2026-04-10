@@ -2,14 +2,15 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
-const { NODE_ENV } = require("./config/env");
+const { NODE_ENV, CLIENT_ORIGINS } = require("./config/env");
 
 const cityRoutes = require("./routes/cityRoutes");
 const meRoutes = require("./routes/meRoutes");
 const authRoutes = require("./routes/authRoutes");
+const aiRoutes = require("./routes/aiRoutes");
 
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandlers");
-const { apiLimiter, authLimiter } = require("./middleware/rateLimiter");
+const { apiLimiter, authLimiter, aiLimiter } = require("./middleware/rateLimiter");
 
 const app = express();
 
@@ -21,16 +22,11 @@ app.use(helmet());
 app.use(express.json());
 app.use(cookieParser());
 
-const allowlist = (process.env.CLIENT_ORIGINS || "http://localhost:5173")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-
 app.use(
   cors({
     origin(origin, cb) {
       if (!origin) return cb(null, true);
-      if (allowlist.includes(origin)) return cb(null, true);
+      if (CLIENT_ORIGINS.includes(origin)) return cb(null, true);
       return cb(new Error("CORS_NOT_ALLOWED"));
     },
     credentials: true,
@@ -55,11 +51,13 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/auth/login", authLimiter);
+app.use("/api/ai", aiLimiter);
 app.use("/api/", apiLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/cities", cityRoutes);
 app.use("/api/me", meRoutes);
+app.use("/api/ai", aiRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

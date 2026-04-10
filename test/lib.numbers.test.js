@@ -10,6 +10,8 @@ const {
   medianRentToAffordability100,
   medianRentToAffordability10,
   normalizeSafetyTo10,
+  rangeScore,
+  rangeScoreInverted,
 } = require("../src/lib/numbers");
 
 // ─── toNumOrNull ──────────────────────────────────────────────────────────────
@@ -151,4 +153,45 @@ test("normalizeSafetyTo10: returns null for non-numeric inputs", () => {
 test("normalizeSafetyTo10: clamps out-of-range values", () => {
   assert.equal(normalizeSafetyTo10(-5), 0);   // below 0 → 0
   assert.equal(normalizeSafetyTo10(150), 10); // legacy 0-100, 150/10=15 → clamped to 10
+});
+
+// ─── rangeScore ───────────────────────────────────────────────────────────────
+
+test("rangeScore: maps min → 0, max → 100, midpoint → 50", () => {
+  assert.equal(rangeScore(0, 0, 10), 0);
+  assert.equal(rangeScore(10, 0, 10), 100);
+  assert.equal(rangeScore(5, 0, 10), 50);
+});
+
+test("rangeScore: clamps values outside [min, max]", () => {
+  assert.equal(rangeScore(-5, 0, 10), 0);   // below min → clamped to 0
+  assert.equal(rangeScore(15, 0, 10), 100); // above max → clamped to 100
+});
+
+test("rangeScore: returns null for invalid inputs or degenerate range", () => {
+  assert.equal(rangeScore(null, 0, 10), null);
+  assert.equal(rangeScore(5, null, 10), null);
+  assert.equal(rangeScore(5, 0, null), null);
+  assert.equal(rangeScore(5, 10, 10), null); // max === min → degenerate
+  assert.equal(rangeScore(5, 10, 0), null);  // max < min → degenerate
+});
+
+// ─── rangeScoreInverted ───────────────────────────────────────────────────────
+
+test("rangeScoreInverted: maps min → 100, max → 0, midpoint → 50", () => {
+  assert.equal(rangeScoreInverted(0, 0, 10), 100);
+  assert.equal(rangeScoreInverted(10, 0, 10), 0);
+  assert.equal(rangeScoreInverted(5, 0, 10), 50);
+});
+
+test("rangeScoreInverted: clamps values outside [min, max]", () => {
+  assert.equal(rangeScoreInverted(-5, 0, 10), 100); // below min → clamped to 100
+  assert.equal(rangeScoreInverted(15, 0, 10), 0);   // above max → clamped to 0
+});
+
+test("rangeScoreInverted: returns null for invalid inputs or degenerate range", () => {
+  assert.equal(rangeScoreInverted(null, 0, 10), null);
+  assert.equal(rangeScoreInverted(5, null, 10), null);
+  assert.equal(rangeScoreInverted(5, 0, null), null);
+  assert.equal(rangeScoreInverted(5, 10, 10), null); // max === min → degenerate
 });

@@ -49,6 +49,8 @@ function loadCityService(cityDocs, statsSnaps, metricsSnaps) {
           doc(id) {
             const doc = cityDocs.find((d) => d.id === id);
             return {
+              _collection: "cities",
+              _id: id,
               async get() {
                 return doc ?? { exists: false, id, data() { return {}; } };
               },
@@ -56,21 +58,12 @@ function loadCityService(cityDocs, statsSnaps, metricsSnaps) {
           },
         };
       }
-      if (name === "city_stats") {
-        return {
-          doc(id) {
-            return { async get() { return { exists: false, data() { return {}; } }; } };
-          },
-        };
-      }
-      if (name === "city_metrics") {
-        return {
-          doc(id) {
-            return { async get() { return { exists: false, data() { return {}; } }; } };
-          },
-        };
-      }
+      // For city_stats and city_metrics, return refs that carry _collection
+      // so getAll() can dispatch to the correct snaps array by path rather than call order.
       return {
+        doc(id) {
+          return { _collection: name, _id: id };
+        },
         where() { return this; },
         orderBy() { return this; },
         limit() { return this; },
@@ -78,17 +71,18 @@ function loadCityService(cityDocs, statsSnaps, metricsSnaps) {
       };
     },
     async getAll(...refs) {
-      // refs are not real Firestore refs here; we use positional snaps arrays
-      if (statsSnaps && metricsSnaps) {
-        // alternate between the two arrays based on call count
-        getAllCallCount++;
-        return getAllCallCount % 2 === 1 ? statsSnaps : metricsSnaps;
+      // Dispatch based on the first ref's collection so the result is correct
+      // regardless of call order — avoids the fragile call-count alternation.
+      const collection = refs[0]?._collection;
+      if (collection === "city_stats") {
+        return statsSnaps ?? refs.map(() => ({ exists: false, data() { return {}; } }));
+      }
+      if (collection === "city_metrics") {
+        return metricsSnaps ?? refs.map(() => ({ exists: false, data() { return {}; } }));
       }
       return refs.map(() => ({ exists: false, data() { return {}; } }));
     },
   };
-
-  let getAllCallCount = 0;
 
   setMock("src/config/firebase.js", { db: dbMock, admin: adminMock });
   setMock("src/utils/timestamps.js", {

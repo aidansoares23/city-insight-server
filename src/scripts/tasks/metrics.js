@@ -1,5 +1,4 @@
 const { upsertCityMetrics } = require("../../utils/cityMetrics");
-const { recomputeCityLivability } = require("../../utils/cityStats");
 const { db } = require("../../config/firebase");
 const { fetchAcsPlacesByState, ACS_YEAR } = require("../../services/censusService");
 const { censusNameToStateSlug } = require("../../lib/slugs");
@@ -8,7 +7,8 @@ const { censusNameToStateSlug } = require("../../lib/slugs");
  * Syncs population and median rent from the Census ACS API into `city_metrics`.
  * Groups cities by state and issues one ACS request per unique state.
  * Matches ACS place names to city slugs via `censusNameToStateSlug`; unmatched cities are skipped.
- * Triggers a livability recompute after each successful upsert.
+ * Upserts within each state are written in parallel. Run `livability --all` afterwards to
+ * propagate score changes (the weekly-refresh pipeline does this automatically).
  * @param {{ cities?: string[]|null, dryRun?: boolean, verbose?: boolean }} [options]
  * @returns {Promise<{ touchedCityIds: string[] }>}
  */
@@ -58,6 +58,7 @@ async function taskMetrics({ cities, dryRun = false, verbose = false } = {}) {
       bySlug.set(slug, r);
     }
 
+    const writes = [];
     for (const city of stateCities) {
       const row = bySlug.get(city.id);
       if (!row) {
@@ -78,14 +79,19 @@ async function taskMetrics({ cities, dryRun = false, verbose = false } = {}) {
       if (dryRun) {
         console.log(`[dry-run][metrics] would upsert ${city.id}`, patch);
         touchedCityIds.push(city.id);
-        continue;
+      } else {
+        writes.push({ cityId: city.id, patch });
       }
+    }
 
-      await upsertCityMetrics(city.id, patch, { owner: "metricsSync" });
-      await recomputeCityLivability(city.id);
-
-      touchedCityIds.push(city.id);
-      if (verbose) console.log(`[metrics] updated ${city.id}`);
+    if (writes.length) {
+      await Promise.all(
+        writes.map(({ cityId, patch }) => upsertCityMetrics(cityId, patch, { owner: "metricsSync" })),
+      );
+      for (const { cityId } of writes) {
+        touchedCityIds.push(cityId);
+        if (verbose) console.log(`[metrics] updated ${cityId}`);
+      }
     }
   }
 

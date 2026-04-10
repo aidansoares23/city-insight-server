@@ -89,13 +89,9 @@ async function listReviewsForCity(req, res, next) {
 
     const reviewIds = docs.map((doc) => doc.id);
 
-    // Fetch reaction counts for all reviews in parallel
-    const [countsList, myReactionsMap] = await Promise.all([
-      Promise.all(
-        reviewIds.map((reviewId) =>
-          reactionService.getReactionCountsForReview({ reviewId }),
-        ),
-      ),
+    // Fetch reaction counts for all reviews in a single query (batched by reviewId)
+    const [countsMap, myReactionsMap] = await Promise.all([
+      reactionService.getReactionCountsForReviews(reviewIds),
       req.user
         ? reactionService.getMyReactionsForReviews({
             userId: req.user.sub,
@@ -104,8 +100,9 @@ async function listReviewsForCity(req, res, next) {
         : Promise.resolve(new Map()),
     ]);
 
-    const reviews = docs.map((doc, i) => ({
-      ...toReview(doc.id, doc.data(), countsList[i]),
+    const EMPTY_COUNTS = { helpful: 0, agree: 0, disagree: 0 };
+    const reviews = docs.map((doc) => ({
+      ...toReview(doc.id, doc.data(), countsMap.get(doc.id) ?? EMPTY_COUNTS),
       myReaction: myReactionsMap.get(doc.id) ?? null,
     }));
 

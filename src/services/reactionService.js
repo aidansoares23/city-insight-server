@@ -1,5 +1,6 @@
 const { db } = require("../config/firebase");
 const { serverTimestamps, updatedTimestamp } = require("../utils/timestamps");
+const { AppError } = require("../lib/errors");
 
 const COLLECTION = "review_reactions";
 
@@ -10,9 +11,24 @@ function reactionDocId(userId, reviewId) {
 
 /**
  * Creates or replaces the authenticated user's reaction on a review.
- * If they previously reacted with a different type, it is overwritten.
+ * Validates that the review exists, belongs to the given city, and was not written by this user.
+ * Throws AppError 404 if not found, 403 if the user tries to react to their own review.
+ * If they previously reacted with a different type, the reaction is overwritten.
  */
 async function upsertReaction({ userId, reviewId, cityId, type }) {
+  // Validate review existence, city ownership, and self-reaction guard
+  const reviewSnap = await db.collection("reviews").doc(reviewId).get();
+  if (!reviewSnap.exists) {
+    throw new AppError("Review not found", { status: 404, code: "NOT_FOUND" });
+  }
+  const reviewData = reviewSnap.data();
+  if (reviewData.cityId !== cityId) {
+    throw new AppError("Review not found for this city", { status: 404, code: "NOT_FOUND" });
+  }
+  if (reviewData.userId === userId) {
+    throw new AppError("You cannot react to your own review", { status: 403, code: "CANNOT_REACT_TO_OWN_REVIEW" });
+  }
+
   const docId = reactionDocId(userId, reviewId);
   const ref = db.collection(COLLECTION).doc(docId);
 
@@ -47,20 +63,29 @@ async function getMyReaction({ userId, reviewId }) {
 }
 
 /**
- * Returns reaction counts for a review in the shape `{ helpful, agree, disagree }`.
- * Uses a collection-group query filtered to the given reviewId.
+ * Returns reaction counts for every review in the list in a single query.
+ * Returns a Map<reviewId, { helpful, agree, disagree }>.
+ * Firestore `in` supports up to 30 values; the list is chunked accordingly.
  */
-async function getReactionCountsForReview({ reviewId }) {
-  const snap = await db
-    .collection(COLLECTION)
-    .where("reviewId", "==", reviewId)
-    .get();
+async function getReactionCountsForReviews(reviewIds) {
+  if (!reviewIds.length) return new Map();
 
-  const counts = { helpful: 0, agree: 0, disagree: 0 };
-  snap.forEach((doc) => {
-    const { type } = doc.data();
-    if (type in counts) counts[type]++;
-  });
+  const chunks = [];
+  for (let i = 0; i < reviewIds.length; i += 30) chunks.push(reviewIds.slice(i, i + 30));
+
+  const snaps = await Promise.all(
+    chunks.map((chunk) => db.collection(COLLECTION).where("reviewId", "in", chunk).get()),
+  );
+
+  const counts = new Map();
+  for (const snap of snaps) {
+    snap.forEach((doc) => {
+      const { reviewId, type } = doc.data();
+      if (!counts.has(reviewId)) counts.set(reviewId, { helpful: 0, agree: 0, disagree: 0 });
+      const entry = counts.get(reviewId);
+      if (type in entry) entry[type]++;
+    });
+  }
   return counts;
 }
 
@@ -90,6 +115,6 @@ module.exports = {
   upsertReaction,
   deleteReaction,
   getMyReaction,
-  getReactionCountsForReview,
+  getReactionCountsForReviews,
   getMyReactionsForReviews,
 };

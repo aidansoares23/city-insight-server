@@ -15,43 +15,43 @@ setMock("src/utils/cityMetrics.js", { upsertCityMetrics: async () => {} });
 setMock("src/utils/cityStats.js", { recomputeCityLivability: async () => {} });
 
 const {
-  computeSafetyScoreFromIndex,
+  computeSafetyScore,
   readCrimeRowsFromCsv,
   avgLastNYears,
 } = require("../src/scripts/tasks/safety");
 
-// ─── computeSafetyScoreFromIndex ──────────────────────────────────────────────
+// ─── computeSafetyScore ───────────────────────────────────────────────────────
 
-test("computeSafetyScoreFromIndex: 0 crime index → score 10", () => {
-  assert.equal(computeSafetyScoreFromIndex(0), 10);
+test("computeSafetyScore: 0 crime index → score 10", () => {
+  assert.equal(computeSafetyScore(0), 10);
 });
 
-test("computeSafetyScoreFromIndex: RATE_AT_ZERO (2500) → score 0", () => {
-  assert.equal(computeSafetyScoreFromIndex(2500), 0);
+test("computeSafetyScore: RATE_AT_ZERO (2500) → score 0", () => {
+  assert.equal(computeSafetyScore(2500), 0);
 });
 
-test("computeSafetyScoreFromIndex: midpoint (1250) → score 5", () => {
-  assert.equal(computeSafetyScoreFromIndex(1250), 5);
+test("computeSafetyScore: midpoint (1250) → score 5", () => {
+  assert.equal(computeSafetyScore(1250), 5);
 });
 
-test("computeSafetyScoreFromIndex: above RATE_AT_ZERO → clamped to 0", () => {
-  assert.equal(computeSafetyScoreFromIndex(3000), 0);
-  assert.equal(computeSafetyScoreFromIndex(10000), 0);
+test("computeSafetyScore: above RATE_AT_ZERO → clamped to 0", () => {
+  assert.equal(computeSafetyScore(3000), 0);
+  assert.equal(computeSafetyScore(10000), 0);
 });
 
-test("computeSafetyScoreFromIndex: returns 1-decimal precision", () => {
+test("computeSafetyScore: returns 1-decimal precision", () => {
   // 750/2500 = 0.3 → raw = 10 - 3 = 7 → exactly 7.0
-  const score = computeSafetyScoreFromIndex(750);
+  const score = computeSafetyScore(750);
   assert.equal(score, 7);
   // verify it's a valid 1-decimal number
   assert.ok(Number.isFinite(score));
   assert.ok((score * 10) % 1 === 0, "result should have at most 1 decimal place");
 });
 
-test("computeSafetyScoreFromIndex: returns null for non-finite input", () => {
-  assert.equal(computeSafetyScoreFromIndex(NaN), null);
-  assert.equal(computeSafetyScoreFromIndex(Infinity), null);
-  assert.equal(computeSafetyScoreFromIndex(undefined), null);
+test("computeSafetyScore: returns null for non-finite input", () => {
+  assert.equal(computeSafetyScore(NaN), null);
+  assert.equal(computeSafetyScore(Infinity), null);
+  assert.equal(computeSafetyScore(undefined), null);
 });
 
 // ─── readCrimeRowsFromCsv ─────────────────────────────────────────────────────

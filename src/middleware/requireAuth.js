@@ -1,25 +1,6 @@
 const jwt = require("jsonwebtoken");
-const { NODE_ENV, DEV_AUTH_BYPASS, SESSION_JWT_SECRET } = require("../config/env");
-
-/** Returns `true` if `ip` is a loopback address (`127.0.0.1`, `::1`, or `::ffff:127.0.0.1`). */
-function isLocalhostIp(ip) {
-  const ipStr = String(ip || "");
-  return ipStr === "127.0.0.1" || ipStr === "::1" || ipStr === "::ffff:127.0.0.1";
-}
-
-/**
- * Returns `true` if the request originates from localhost with no `x-forwarded-for` header.
- * Used to gate the dev auth bypass so it can never be triggered from a proxied/remote request.
- */
-function isLocalDevRequest(req) {
-  const derivedIp = req.ip;
-  const socketIp = req.socket?.remoteAddress;
-  const hasForwardedFor = Boolean(req.headers["x-forwarded-for"]);
-
-  return (
-    isLocalhostIp(derivedIp) && isLocalhostIp(socketIp) && !hasForwardedFor
-  );
-}
+const { SESSION_JWT_SECRET } = require("../config/env");
+const { isBypassEnabled, isLocalDevRequest, resolveDevBypassUser } = require("./authHelpers");
 
 /** Returns `true` for POST, PUT, PATCH, and DELETE requests. */
 function isStateChangingMethod(req) {
@@ -53,11 +34,7 @@ function enforceCsrfLite(req, res) {
  */
 async function requireAuth(req, res, next) {
   try {
-    const isProd = NODE_ENV === "production";
-    const bypassEnabled =
-      !isProd && String(DEV_AUTH_BYPASS).toLowerCase() === "true";
-
-    if (bypassEnabled) {
+    if (isBypassEnabled()) {
       if (!isLocalDevRequest(req)) {
         return res.status(401).json({
           error: {
@@ -67,8 +44,8 @@ async function requireAuth(req, res, next) {
         });
       }
 
-      const devUser = String(req.header("x-dev-user") || "").trim();
-      if (!devUser || devUser.length > 128) {
+      const devUser = resolveDevBypassUser(req);
+      if (!devUser) {
         return res.status(401).json({
           error: {
             code: "UNAUTHENTICATED",
@@ -77,7 +54,7 @@ async function requireAuth(req, res, next) {
         });
       }
 
-      req.user = { sub: devUser, isDevBypass: true };
+      req.user = devUser;
       return next();
     }
 
@@ -104,6 +81,7 @@ async function requireAuth(req, res, next) {
       email: payload.email || null,
       name: payload.name || null,
       picture: payload.picture || null,
+      emailVerified: payload.emailVerified ?? false,
     };
 
     return next();

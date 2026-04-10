@@ -39,10 +39,34 @@ if (!FBI_API_KEY) {
   console.warn("FBI_API_KEY is not set. FBI crime data sync will fail.");
 }
 
+const ANTHROPIC_API_KEY = String(process.env.ANTHROPIC_API_KEY || "").trim();
+if (!ANTHROPIC_API_KEY) {
+  console.warn("ANTHROPIC_API_KEY is not set. AI query endpoint will fail.");
+}
+
+const AI_ENABLED = parseBool(process.env.AI_ENABLED ?? "true");
+
+const OPENAQ_API_KEY = String(process.env.OPENAQ_API_KEY || "").trim();
+if (!OPENAQ_API_KEY) {
+  console.warn("OPENAQ_API_KEY is not set. Air quality sync will fail.");
+}
+
+const CLIENT_ORIGINS = String(process.env.CLIENT_ORIGINS || "http://localhost:5173")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (!process.env.CLIENT_ORIGINS && NODE_ENV === "production") {
+  console.warn("CLIENT_ORIGINS is not set. CORS will only allow http://localhost:5173.");
+}
+
 module.exports = {
   NODE_ENV,
   DEV_AUTH_BYPASS,
   GOOGLE_CLIENT_ID,
   SESSION_JWT_SECRET,
   FBI_API_KEY,
+  ANTHROPIC_API_KEY,
+  AI_ENABLED,
+  OPENAQ_API_KEY,
+  CLIENT_ORIGINS,
 };

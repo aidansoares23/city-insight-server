@@ -49,6 +49,30 @@ function medianRentToAffordability10(value, rentMax = 3500) {
 }
 
 /**
+ * Maps `value` linearly from [min, max] to [0–100] where max → 100 (higher is better).
+ * Clamped to [0, 100]. Returns `null` for null/undefined/invalid inputs or a degenerate range (max ≤ min).
+ */
+function rangeScore(value, min, max) {
+  const v  = toOptionalNumOrNull(value);
+  const lo = toOptionalNumOrNull(min);
+  const hi = toOptionalNumOrNull(max);
+  if (v == null || lo == null || hi == null || hi <= lo) return null;
+  return clamp0to100(((v - lo) / (hi - lo)) * 100);
+}
+
+/**
+ * Maps `value` linearly from [min, max] to [0–100] where min → 100 (inverted — lower value is better).
+ * Clamped to [0, 100]. Returns `null` for null/undefined/invalid inputs or a degenerate range (max ≤ min).
+ */
+function rangeScoreInverted(value, min, max) {
+  const v  = toOptionalNumOrNull(value);
+  const lo = toOptionalNumOrNull(min);
+  const hi = toOptionalNumOrNull(max);
+  if (v == null || lo == null || hi == null || hi <= lo) return null;
+  return clamp0to100(((hi - v) / (hi - lo)) * 100);
+}
+
+/**
  * Normalizes a safety score to the 0–10 scale.
  * Handles legacy values stored on the 0–100 scale (divides by 10 if > 10).
  * Returns `null` for null/non-finite input.
@@ -70,4 +94,6 @@ module.exports = {
   medianRentToAffordability100,
   medianRentToAffordability10,
   normalizeSafetyTo10,
+  rangeScore,
+  rangeScoreInverted,
 };

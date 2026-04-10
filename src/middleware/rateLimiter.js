@@ -30,4 +30,13 @@ const authLimiter = rateLimit({
   handler,
 });
 
-module.exports = { apiLimiter, authLimiter };
+// AI limit — tight because each query can trigger up to 8 Anthropic API calls
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: NODE_ENV === "test" ? 0 : 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  handler,
+});
+
+module.exports = { apiLimiter, authLimiter, aiLimiter };
