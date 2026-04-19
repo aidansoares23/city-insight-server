@@ -41,8 +41,9 @@ app.use(cookieParser());
 app.use(
   cors({
     origin(origin, cb) {
-      if (!origin && NODE_ENV === "development") return cb(null, true);
-      if (!origin) return cb(new Error("CORS_NOT_ALLOWED"));
+      // No Origin header means the request is either same-origin (proxied by Vercel)
+      // or a server-to-server call — neither is a cross-origin browser attack.
+      if (!origin) return cb(null, true);
       if (CLIENT_ORIGINS.includes(origin)) return cb(null, true);
       return cb(new Error("CORS_NOT_ALLOWED"));
     },
