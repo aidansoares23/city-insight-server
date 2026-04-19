@@ -47,6 +47,7 @@ describe("meService.deleteAccount", () => {
         if (name === "reviews") {
           return {
             where() { return this; },
+            limit() { return this; },
             async get() {
               return {
                 docs: [
@@ -90,6 +91,7 @@ describe("meService.deleteAccount", () => {
         if (name === "reviews") {
           return {
             where() { return this; },
+            limit() { return this; },
             async get() {
               return {
                 docs: [
@@ -137,6 +139,7 @@ describe("meService.deleteAccount", () => {
         if (name === "reviews") {
           return {
             where() { return this; },
+            limit() { return this; },
             async get() {
               return {
                 docs: [{ data() { return { cityId: "austin-tx" }; } }],
@@ -195,6 +198,7 @@ describe("meService.deleteAccount", () => {
         if (name === "reviews") {
           return {
             where() { return this; },
+            limit() { return this; },
             async get() {
               return {
                 docs: [

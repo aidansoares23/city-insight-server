@@ -79,6 +79,7 @@ setMock("src/services/cityService.js", {
   async getCityDetails() {
     return { city: null, stats: null, metrics: null, livability: null, reviews: [] };
   },
+  async warmCityListCache() {},
 });
 
 setMock("src/services/reviewService.js", {
@@ -143,6 +144,7 @@ async function requestJson(urlPath, { method = "GET", headers = {}, body } = {})
   const response = await fetch(`${baseUrl}${urlPath}`, {
     method,
     headers: {
+      "Origin": "http://localhost:5173",
       ...headers,
       ...(body ? { "content-type": "application/json" } : {}),
     },
