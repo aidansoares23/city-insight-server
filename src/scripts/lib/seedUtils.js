@@ -4,17 +4,35 @@
  */
 
 const crypto = require("crypto");
+const path   = require("path");
 
 // ---------------------------------------------------------------------------
-// Seed users — the same 5 synthetic user accounts used in all seed scripts
+// AI-generated city profiles — loaded at startup, falls back gracefully
+// ---------------------------------------------------------------------------
+
+let CITY_PROFILES = {};
+try {
+  CITY_PROFILES = require(path.join(__dirname, "../data/cityProfiles.json"));
+} catch {
+  // Not generated yet — generateCityLines.js has not been run.
+  // seedUtils will fall back to the hardcoded tables below.
+}
+
+// ---------------------------------------------------------------------------
+// Seed users — 10 synthetic user accounts used across all seed scripts
 // ---------------------------------------------------------------------------
 
 const USERS = [
-  { id: "seed-user-001", email: "seed1@example.com", displayName: "Seed User 1" },
-  { id: "seed-user-002", email: "seed2@example.com", displayName: "Seed User 2" },
-  { id: "seed-user-003", email: "seed3@example.com", displayName: "Seed User 3" },
-  { id: "seed-user-004", email: "seed4@example.com", displayName: "Seed User 4" },
-  { id: "seed-user-005", email: "seed5@example.com", displayName: "Seed User 5" },
+  { id: "seed-user-001", email: "seed1@example.com",  displayName: "Jordan M." },
+  { id: "seed-user-002", email: "seed2@example.com",  displayName: "Priya K."  },
+  { id: "seed-user-003", email: "seed3@example.com",  displayName: "Marcus T." },
+  { id: "seed-user-004", email: "seed4@example.com",  displayName: "Aisha R."  },
+  { id: "seed-user-005", email: "seed5@example.com",  displayName: "Devon L."  },
+  { id: "seed-user-006", email: "seed6@example.com",  displayName: "Tanya W."  },
+  { id: "seed-user-007", email: "seed7@example.com",  displayName: "Chris H."  },
+  { id: "seed-user-008", email: "seed8@example.com",  displayName: "Nadia F."  },
+  { id: "seed-user-009", email: "seed9@example.com",  displayName: "Sam O."    },
+  { id: "seed-user-010", email: "seed10@example.com", displayName: "Elena V."  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -91,16 +109,40 @@ function pick(arr, i) {
 }
 
 /**
+ * Returns the base ratings for a city, preferring AI-generated profiles,
+ * then the hardcoded table, then a neutral fallback.
+ */
+function getCityBaseRatings(cityId) {
+  return (
+    CITY_PROFILES[cityId]?.baseRatings ||
+    CITY_BASE_RATINGS[cityId] ||
+    { safety: 6, affordability: 3, walkability: 4, cleanliness: 5 }
+  );
+}
+
+/**
+ * Returns the review lines for a city, preferring AI-generated profiles,
+ * then the hardcoded table, then a single generic fallback.
+ */
+function getCityReviewLines(cityId) {
+  return (
+    CITY_PROFILES[cityId]?.reviewLines ||
+    CITY_REVIEW_LINES[cityId] ||
+    ["Overall, it really depends on the specific neighborhood."]
+  );
+}
+
+/**
  * Generates deterministic but varied ratings for a given city and user index.
- * Unknown cityIds fall back to a neutral set.
+ * With 10 users the delta spans {-2, -1, 0, +1, +2} for a realistic spread.
  */
 function generateRatings(cityId, userIndex) {
-  const base = CITY_BASE_RATINGS[cityId] || { safety: 6, affordability: 3, walkability: 4, cleanliness: 5 };
-  const delta = (userIndex % 3) - 1; // -1, 0, +1
-  const safety        = clamp(base.safety        + delta,                          1, 10);
-  const affordability = clamp(base.affordability + (delta === 1 ? 0 : -1),         1, 10);
-  const walkability   = clamp(base.walkability   + (userIndex % 2 === 0 ? 1 : 0),  1, 10);
-  const cleanliness   = clamp(base.cleanliness   + (userIndex % 2 === 1 ? 1 : 0),  1, 10);
+  const base  = getCityBaseRatings(cityId);
+  const delta = (userIndex % 5) - 2; // -2, -1, 0, +1, +2
+  const safety        = clamp(base.safety        + delta,                         1, 10);
+  const affordability = clamp(base.affordability + Math.floor(delta / 2),         1, 10);
+  const walkability   = clamp(base.walkability   + (userIndex % 2 === 0 ? 1 : 0), 1, 10);
+  const cleanliness   = clamp(base.cleanliness   + (userIndex % 2 === 1 ? 1 : 0), 1, 10);
   const overall       = clamp(Math.round((safety + affordability + walkability + cleanliness) / 4), 1, 10);
   return { safety, affordability, walkability, cleanliness, overall };
 }
@@ -111,10 +153,12 @@ function generateComment(cityId, ratings, userIndex) {
     { tics: ["Honestly,", "Overall,", "In my experience,"] },
     { tics: ["Love it.", "Big fan.", "Genuinely enjoyed it—"] },
     { tics: ["Not gonna lie,", "Be warned:", "If I'm being real,"] },
+    { tics: ["Worth noting:", "Quick take:", "My take—"] },
+    { tics: ["All things considered,", "To be fair,", "Stepping back,"] },
   ];
-  const voice = voices[userIndex % voices.length];
-  const base = pick(voice.tics, userIndex);
-  const lines = CITY_REVIEW_LINES[cityId] || ["Overall, it depends a lot on the neighborhood."];
+  const voice    = voices[userIndex % voices.length];
+  const base     = pick(voice.tics, userIndex);
+  const lines    = getCityReviewLines(cityId);
   const cityLine = pick(lines, userIndex);
 
   const safetyNote =
@@ -142,8 +186,11 @@ function generateComment(cityId, ratings, userIndex) {
 
 module.exports = {
   USERS,
+  CITY_PROFILES,
   CITY_BASE_RATINGS,
   CITY_REVIEW_LINES,
+  getCityBaseRatings,
+  getCityReviewLines,
   makeReviewId,
   chunk,
   clamp,

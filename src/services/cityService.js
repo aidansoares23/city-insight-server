@@ -38,15 +38,25 @@ function cmpNullLastAsc(a, b) {
 // ---------------------------------------------------------------------------
 // City list cache — avoids 3N Firestore reads on every Cities page load.
 // Stores the merged rows (city + stats + metrics) before search/sort/limit.
-// TTL of 3 minutes; sync scripts can call invalidateCityListCache() after writes.
+// TTL of 15 minutes; sync scripts can call invalidateCityListCache() after writes.
+// NOTE: this cache is per-process (in-memory). It resets on server restart and
+// is not shared across multiple instances. Budget ~900 Firestore reads per miss.
 // ---------------------------------------------------------------------------
 let cityListCache = { rows: null, loadedAt: 0 };
 let cityListInflight = null;
-const CITY_LIST_CACHE_TTL_MS = 3 * 60 * 1000;
+const CITY_LIST_CACHE_TTL_MS = 15 * 60 * 1000;
 
 /** Clears the city list cache. Call after any write that changes city data. */
 function invalidateCityListCache() {
   cityListCache = { rows: null, loadedAt: 0 };
+}
+
+/**
+ * Warms the city list cache proactively (e.g. on server startup).
+ * Returns immediately if cache is already fresh.
+ */
+async function warmCityListCache() {
+  await fetchAllCityRows();
 }
 
 /**
@@ -489,4 +499,5 @@ module.exports = {
   invalidateCityListCache,
   invalidateCityDetailsCache,
   invalidateCityAttractionsCache,
+  warmCityListCache,
 };

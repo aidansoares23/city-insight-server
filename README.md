@@ -80,7 +80,8 @@ src/
 │   ├── authController.js
 │   ├── cityController.js
 │   ├── meController.js
-│   └── reactionController.js
+│   ├── reactionController.js
+│   └── reviewController.js # Create / update / delete reviews per city
 ├── services/               # Business logic + Firestore transactions
 │   ├── aiQueryService.js   # AI tool implementations (getCity, rankCities, filterCities, …)
 │   ├── aiSummaryService.js # City summary generation and caching
@@ -233,24 +234,18 @@ Save it somewhere safe (e.g. `~/.config/city-insight/serviceAccount.json`). **Do
 
 ### 3. Configure environment
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env` in the project root and fill in your values:
 
-```env
-FIREBASE_SERVICE_ACCOUNT_PATH=/absolute/path/to/serviceAccount.json
-SESSION_JWT_SECRET=<random-64-char-string>
-REVIEW_ID_SALT=<random-64-char-string>
-GOOGLE_CLIENT_ID=123456789-abc.apps.googleusercontent.com
-ANTHROPIC_API_KEY=<your-anthropic-api-key>
-
-# Optional
-PORT=3000
-NODE_ENV=development
-CLIENT_ORIGINS=http://localhost:5173
-DEV_AUTH_BYPASS=false
-AI_ENABLED=true
+```bash
+cp .env.example .env
 ```
 
-> Generate secrets with: `openssl rand -hex 32`
+Generate the required secrets with:
+
+```bash
+openssl rand -hex 32   # use once for SESSION_JWT_SECRET, once for REVIEW_ID_SALT
+```
+
 > **Never change `REVIEW_ID_SALT` after launch** — it is used to derive all review document IDs. Changing it will orphan existing reviews.
 
 ---
@@ -315,20 +310,23 @@ npm test
 
 Uses Node.js's built-in test runner — no external framework needed. All Firestore calls are mocked, so no Firebase connection is required.
 
-**152 tests** across 10 files:
+**211 tests** across 13 files:
 
-| File                                  | Tests | What it covers                                                                          |
-| ------------------------------------- | ----- | --------------------------------------------------------------------------------------- |
-| `test/app.smoke.test.js`              | 11    | HTTP routes, auth, CSRF, account deletion                                               |
-| `test/lib.numbers.test.js`            | 26    | Numeric utility functions including `rangeScore` / `rangeScoreInverted`                 |
-| `test/lib.reviews.test.js`            | 20    | Review validation + deterministic ID generation                                         |
-| `test/middleware.requireAuth.test.js` | 17    | JWT validation, dev bypass, CSRF-lite                                                   |
-| `test/utils.cityStats.test.js`        | 37    | Aggregation math + livability v0/v1 formulas + norms computation                        |
-| `test/tasks.safety.test.js`           | 15    | Safety score formula + CSV parsing                                                      |
-| `test/services.meService.test.js`     | 10    | Account deletion (partial failure recovery), user profile, review list                  |
-| `test/services.reviewService.test.js` | 7     | Cursor validation (both directions), review lookup                                      |
-| `test/services.cityService.test.js`   | 9     | City list — all sort modes, search filter, 404 behaviour                                |
-| `test/utils.cityMetrics.test.js`      | 5     | Metrics upsert, null-guard, snapshot audit, getCityMetrics                              |
+| File                                       | Tests | What it covers                                                                          |
+| ------------------------------------------ | ----- | --------------------------------------------------------------------------------------- |
+| `test/app.smoke.test.js`                   | 12    | HTTP routes, auth, CSRF, account deletion                                               |
+| `test/controllers.aiController.test.js`    | 19    | `detectRankingMetric`, `detectStateFilter`, `sanitizeCityLine` helpers                  |
+| `test/lib.numbers.test.js`                 | 26    | Numeric utility functions including `rangeScore` / `rangeScoreInverted`                 |
+| `test/lib.reviews.test.js`                 | 20    | Review validation + deterministic ID generation                                         |
+| `test/middleware.requireAuth.test.js`       | 17    | JWT validation, dev bypass, CSRF-lite                                                   |
+| `test/utils.cityStats.test.js`             | 37    | Aggregation math + livability v0/v1 formulas + norms computation                        |
+| `test/tasks.safety.test.js`                | 15    | Safety score formula + CSV parsing                                                      |
+| `test/services.aiQueryService.test.js`     | 25    | `rankCities`, `filterCities`, `getCity` — metric routing, state filtering, name match  |
+| `test/services.meService.test.js`          | 10    | Account deletion (partial failure recovery), user profile, review list                  |
+| `test/services.reactionService.test.js`    | 14    | Reaction upsert/delete, count aggregation, per-user reaction lookup                     |
+| `test/services.reviewService.test.js`      | 7     | Cursor validation (both directions), review lookup                                      |
+| `test/services.cityService.test.js`        | 9     | City list — all sort modes, search filter, 404 behaviour                                |
+| `test/utils.cityMetrics.test.js`           | 5     | Metrics upsert, null-guard, snapshot audit, getCityMetrics                              |
 
 CI runs `npm test` on every push and pull request to `main` via GitHub Actions.
 

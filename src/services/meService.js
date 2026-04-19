@@ -92,7 +92,7 @@ async function deleteAccount({ userId }) {
   const uid = String(userId || "").trim();
   if (!uid) throw new AppError("Missing user identity", { status: 401, code: "UNAUTHENTICATED" });
 
-  const snap = await db.collection("reviews").where("userId", "==", uid).get();
+  const snap = await db.collection("reviews").where("userId", "==", uid).limit(5000).get();
 
   // Run all review deletions in parallel. Use allSettled so a single failure
   // (e.g. transient network error) does not block the rest or prevent user deletion.
@@ -140,6 +140,7 @@ async function listMyFavorites({ userId }) {
     .doc(uid)
     .collection("favorites")
     .orderBy("createdAt", "desc")
+    .limit(500)
     .get();
 
   return snap.docs.map((d) => ({
@@ -190,7 +191,7 @@ async function removeFavorite({ userId, citySlug }) {
 async function updateProfile({ userId, displayName }) {
   const uid = String(userId || "").trim();
   if (!uid) throw new AppError("Missing user identity", { status: 401, code: "UNAUTHENTICATED" });
-  const name = String(displayName || "").trim();
+  const name = String(displayName || "").trim().replace(/[<>&"'\\]/g, "");
   if (!name || name.length > 50) throw new AppError("Display name must be 1–50 characters", { status: 400, code: "INVALID_INPUT" });
   const ref = db.collection("users").doc(uid);
   const patch = { displayName: name, displayNameCustomized: true, ...updatedTimestamp() };

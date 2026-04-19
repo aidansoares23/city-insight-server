@@ -277,7 +277,7 @@ async function main() {
     console.log(`✅ Upserted ${USERS.length} users.`);
   }
 
-  // 3) Upsert 25 reviews (1 per user per city)
+  // 3) Upsert reviews (1 per user per city — 10 users × 5 cities = 50)
   console.log("Seeding reviews...");
   {
     const reviewDocs = [];

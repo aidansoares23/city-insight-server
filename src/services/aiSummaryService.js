@@ -32,7 +32,8 @@ async function saveSummary(cityId, summary, reviewCount) {
  */
 function shouldRegenerate(cached, currentReviewCount) {
   if (!cached) return true;
-  const delta = (currentReviewCount || 0) - (cached.reviewCountAtGeneration || 0);
+  const delta =
+    (currentReviewCount || 0) - (cached.reviewCountAtGeneration || 0);
   return delta >= REGENERATE_REVIEW_THRESHOLD;
 }
 
@@ -92,7 +93,10 @@ async function generateCitySummary(cityId) {
     if (excerpts) excerptBlock = `\nRecent resident comments:\n${excerpts}`;
   }
 
-  const prompt = `Write a 3–4 sentence "City Snapshot" paragraph for ${city.name}, ${city.state}. Use only the data below — do not add general knowledge. Highlight the most notable scores and one or two resident sentiments if available. Be factual, specific, and concise. Do not use headers or bullet points — write plain prose only.\n\n${dataLines}${excerptBlock}`;
+  const prompt = `Write a 3–4 sentence "City Snapshot" paragraph for ${city.name}, ${city.state}. 
+  Use only the data below — do not add general knowledge. Highlight the most notable scores and 
+  one or two resident sentiments if available. Be factual, specific, and concise. Do not use headers 
+  or bullet points — write plain prose only.\n\n${dataLines}${excerptBlock}`;
 
   const response = await anthropicClient.messages.create({
     model: AI_MODEL,
@@ -123,7 +127,9 @@ async function getOrGenerateSummary(cityId) {
     db.collection("city_stats").doc(cityId).get(),
   ]);
 
-  const currentReviewCount = statsSnap.exists ? (statsSnap.data()?.reviewCount ?? 0) : 0;
+  const currentReviewCount = statsSnap.exists
+    ? (statsSnap.data()?.reviewCount ?? 0)
+    : 0;
 
   if (cached && !shouldRegenerate(cached, currentReviewCount)) {
     return {
@@ -139,7 +145,10 @@ async function getOrGenerateSummary(cityId) {
     return { summary, generatedAt: new Date().toISOString(), fresh: true };
   } catch (err) {
     if (cached) {
-      console.warn(`[aiSummaryService] generation failed for ${cityId}, returning stale cache:`, err.message);
+      console.warn(
+        `[aiSummaryService] generation failed for ${cityId}, returning stale cache:`,
+        err.message,
+      );
       return {
         summary: cached.summary,
         generatedAt: cached.generatedAt?.toDate?.()?.toISOString() ?? null,
