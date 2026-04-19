@@ -1,11 +1,13 @@
 const { taskMetrics } = require("./metrics");
 const { taskSafety } = require("./safety");
+const { taskSafetyApi } = require("./safetyApi");
 const { taskStats } = require("./stats");
 const { taskLivability } = require("./livability");
 
 const STEP_MAP = {
   metrics: taskMetrics,
   safety: taskSafety,
+  "safety-api": taskSafetyApi,
   stats: taskStats,
   livability: taskLivability,
 };

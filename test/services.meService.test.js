@@ -58,7 +58,14 @@ describe("meService.deleteAccount", () => {
           };
         }
         if (name === "users") {
-          return { doc(uid) { return { async delete() { userDeleted.push(uid); } }; } };
+          return {
+            doc(uid) {
+              return {
+                collection() { return { async get() { return { docs: [] }; } }; },
+                async delete() { userDeleted.push(uid); },
+              };
+            },
+          };
         }
       },
     };
@@ -94,7 +101,14 @@ describe("meService.deleteAccount", () => {
           };
         }
         if (name === "users") {
-          return { doc(uid) { return { async delete() { userDeleted.push(uid); } }; } };
+          return {
+            doc(uid) {
+              return {
+                collection() { return { async get() { return { docs: [] }; } }; },
+                async delete() { userDeleted.push(uid); },
+              };
+            },
+          };
         }
       },
     };
@@ -131,7 +145,14 @@ describe("meService.deleteAccount", () => {
           };
         }
         if (name === "users") {
-          return { doc(uid) { return { async delete() { userDeleted.push(uid); } }; } };
+          return {
+            doc(uid) {
+              return {
+                collection() { return { async get() { return { docs: [] }; } }; },
+                async delete() { userDeleted.push(uid); },
+              };
+            },
+          };
         }
       },
     };
@@ -185,7 +206,14 @@ describe("meService.deleteAccount", () => {
           };
         }
         if (name === "users") {
-          return { doc(uid) { return { async delete() { userDeleted.push(uid); } }; } };
+          return {
+            doc(uid) {
+              return {
+                collection() { return { async get() { return { docs: [] }; } }; },
+                async delete() { userDeleted.push(uid); },
+              };
+            },
+          };
         }
       },
     };

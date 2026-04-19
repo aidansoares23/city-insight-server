@@ -1,102 +1,101 @@
 const { upsertCityMetrics } = require("../../utils/cityMetrics");
-const { recomputeCityLivability } = require("../../utils/cityStats");
 const { db } = require("../../config/firebase");
-const { toNumOrNull } = require("../../lib/numbers");
-const { censusNameToSlug } = require("../../lib/slugs");
-
-const ACS_YEAR = "2023";
-const ACS_DATASET = `https://api.census.gov/data/${ACS_YEAR}/acs/acs5`;
-const ACS_VARS = ["B01003_001E", "B25064_001E", "NAME"];
-const ACS_GEO = "&for=place:*&in=state:06";
-
-/**
- * Fetches ACS 5-year population and median rent data for all California places.
- * Requires Node.js 18+ for the global `fetch` API.
- * @returns {Promise<Array<{ name: string, population: number|null, medianRent: number|null }>>}
- */
-async function fetchAcsPlacesCA() {
-  if (typeof globalThis.fetch !== "function") {
-    throw new Error("Global fetch is unavailable. Use Node.js 18+.");
-  }
-
-  const url = `${ACS_DATASET}?get=${ACS_VARS.join(",")}${ACS_GEO}`;
-  const res = await globalThis.fetch(url);
-  if (!res.ok) throw new Error(`ACS API failed: ${res.status}`);
-  const rows = await res.json();
-
-  const header = rows[0];
-  const data = rows.slice(1);
-
-  const idxPop = header.indexOf("B01003_001E");
-  const idxRent = header.indexOf("B25064_001E");
-  const idxName = header.indexOf("NAME");
-  if (idxPop < 0 || idxRent < 0 || idxName < 0)
-    throw new Error("Unexpected ACS response shape");
-
-  return data.map((r) => ({
-    name: r[idxName],
-    population: toNumOrNull(r[idxPop]),
-    medianRent: toNumOrNull(r[idxRent]),
-  }));
-}
+const { fetchAcsPlacesByState, ACS_YEAR } = require("../../services/censusService");
+const { censusNameToStateSlug } = require("../../lib/slugs");
 
 /**
  * Syncs population and median rent from the Census ACS API into `city_metrics`.
- * Matches ACS place names to city slugs via `censusNameToSlug`; unmatched cities are skipped.
- * Triggers a livability recompute after each successful upsert.
+ * Groups cities by state and issues one ACS request per unique state.
+ * Matches ACS place names to city slugs via `censusNameToStateSlug`; unmatched cities are skipped.
+ * Upserts within each state are written in parallel. Run `livability --all` afterwards to
+ * propagate score changes (the weekly-refresh pipeline does this automatically).
  * @param {{ cities?: string[]|null, dryRun?: boolean, verbose?: boolean }} [options]
  * @returns {Promise<{ touchedCityIds: string[] }>}
  */
 async function taskMetrics({ cities, dryRun = false, verbose = false } = {}) {
-  let cityIds = cities;
-
-  if (!cityIds || cityIds.length === 0) {
-    const snap = await db.collection("cities").get();
-    cityIds = snap.docs.map((d) => d.id);
-  }
-
   console.log(`=== metrics (ACS ${ACS_YEAR}) ===`);
-  const acsRows = await fetchAcsPlacesCA();
 
-  const bySlug = new Map();
-  for (const r of acsRows) {
-    const slug = censusNameToSlug(r.name);
-    bySlug.set(slug, r);
+  // Load city docs to get name + state for each slug we care about.
+  const snap = await db.collection("cities").get();
+  const allCityDocs = snap.docs.map((doc) => ({
+    id: doc.id,
+    name: doc.data()?.name ?? null,
+    state: doc.data()?.state ?? null,
+  }));
+
+  const targetIds = cities ? new Set(cities) : null;
+  const cityDocs = targetIds
+    ? allCityDocs.filter((c) => targetIds.has(c.id))
+    : allCityDocs;
+
+  // Group by state so we make one ACS request per state.
+  const byState = new Map();
+  for (const city of cityDocs) {
+    const abbr = String(city.state || "").trim().toUpperCase();
+    if (!abbr) {
+      console.log(`[metrics] skip (no state): ${city.id}`);
+      continue;
+    }
+    if (!byState.has(abbr)) byState.set(abbr, []);
+    byState.get(abbr).push(city);
   }
 
   const touchedCityIds = [];
 
-  for (const cityId of cityIds) {
-    const row = bySlug.get(cityId);
-    if (!row) {
-      console.log(`[metrics] skip (not found in ACS): ${cityId}`);
+  for (const [stateAbbr, stateCities] of byState) {
+    let acsRows;
+    try {
+      acsRows = await fetchAcsPlacesByState(stateAbbr);
+    } catch (err) {
+      console.error(`[metrics] ACS fetch failed for ${stateAbbr}:`, err.message);
       continue;
     }
 
-    const patch = {
-      population: row.population,
-      medianRent: row.medianRent,
-      meta: {
-        source: `acs:${ACS_YEAR}`,
-        syncedAtIso: new Date().toISOString(),
-        version: `acs:${ACS_YEAR}:v1`,
-      },
-    };
-
-    if (dryRun) {
-      console.log(`[dry-run][metrics] would upsert ${cityId}`, patch);
-      touchedCityIds.push(cityId);
-      continue;
+    // Build slug -> row map for fast lookups.
+    const bySlug = new Map();
+    for (const r of acsRows) {
+      const slug = censusNameToStateSlug(r.name, stateAbbr);
+      bySlug.set(slug, r);
     }
 
-    await upsertCityMetrics(cityId, patch, { owner: "metricsSync" });
-    await recomputeCityLivability(cityId);
+    const writes = [];
+    for (const city of stateCities) {
+      const row = bySlug.get(city.id);
+      if (!row) {
+        console.log(`[metrics] skip (not found in ACS ${stateAbbr}): ${city.id}`);
+        continue;
+      }
 
-    touchedCityIds.push(cityId);
-    if (verbose) console.log(`[metrics] updated ${cityId}`);
+      const patch = {
+        population: row.population,
+        medianRent: row.medianRent,
+        meta: {
+          source: `acs:${ACS_YEAR}`,
+          syncedAtIso: new Date().toISOString(),
+          version: `acs:${ACS_YEAR}:v1`,
+        },
+      };
+
+      if (dryRun) {
+        console.log(`[dry-run][metrics] would upsert ${city.id}`, patch);
+        touchedCityIds.push(city.id);
+      } else {
+        writes.push({ cityId: city.id, patch });
+      }
+    }
+
+    if (writes.length) {
+      await Promise.all(
+        writes.map(({ cityId, patch }) => upsertCityMetrics(cityId, patch, { owner: "metricsSync" })),
+      );
+      for (const { cityId } of writes) {
+        touchedCityIds.push(cityId);
+        if (verbose) console.log(`[metrics] updated ${cityId}`);
+      }
+    }
   }
 
-  console.log(`✅ metrics done. Updated ${touchedCityIds.length}/${cityIds.length} cities.`);
+  console.log(`✅ metrics done. Updated ${touchedCityIds.length}/${cityDocs.length} cities.`);
   return { touchedCityIds };
 }
 

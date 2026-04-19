@@ -37,4 +37,51 @@ async function deleteAccount(req, res, next) {
   }
 }
 
-module.exports = { getMe, listMyReviews, deleteAccount };
+/** Returns the authenticated user's favorited cities. */
+async function listMyFavorites(req, res, next) {
+  try {
+    const userId = req.user.sub;
+    const favorites = await meService.listMyFavorites({ userId });
+    res.json({ favorites });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Adds a city to the authenticated user's favorites. */
+async function addFavorite(req, res, next) {
+  try {
+    const userId = req.user.sub;
+    const { slug } = req.params;
+    const result = await meService.addFavorite({ userId, citySlug: slug });
+    res.json({ ok: true, favorite: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Removes a city from the authenticated user's favorites. */
+async function removeFavorite(req, res, next) {
+  try {
+    const userId = req.user.sub;
+    const { slug } = req.params;
+    await meService.removeFavorite({ userId, citySlug: slug });
+    res.json({ ok: true, deleted: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Updates the authenticated user's display name. */
+async function updateProfile(req, res, next) {
+  try {
+    const userId = req.user.sub;
+    const { displayName } = req.body;
+    const result = await meService.updateProfile({ userId, displayName });
+    res.json({ ok: true, user: { id: userId, sub: userId, ...result.user } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getMe, listMyReviews, deleteAccount, listMyFavorites, addFavorite, removeFavorite, updateProfile };

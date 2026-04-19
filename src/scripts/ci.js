@@ -5,9 +5,13 @@ const { initAdmin } = require("./lib/initAdmin");
 // Tasks
 const { taskMetrics } = require("./tasks/metrics");
 const { taskSafety } = require("./tasks/safety");
+const { taskSafetyApi } = require("./tasks/safetyApi");
 const { taskStats } = require("./tasks/stats");
 const { taskLivability } = require("./tasks/livability");
-const { taskCityUpsert } = require("./tasks/cities");
+const { taskCityUpsert, taskCityUpsertBatch } = require("./tasks/cities");
+const { taskAttractions } = require("./tasks/attractions");
+const { taskSummaries } = require("./tasks/summaries");
+const { taskAirQuality } = require("./tasks/airQuality");
 const { taskRun } = require("./tasks/run");
 
 /** Parses a comma-separated city slug string into a lowercase array, or `null` if empty. */
@@ -50,8 +54,22 @@ program
   );
 
 program
+  .command("safety-api")
+  .description("Sync safety scores from FBI Crime Data Explorer API")
+  .option("--cities <slugs>", "comma-separated city ids")
+  .action((opts, cmd) =>
+    withAdmin(() =>
+      taskSafetyApi({
+        cities: parseCities(opts.cities),
+        dryRun: cmd.parent.opts().dryRun,
+        verbose: cmd.parent.opts().verbose,
+      }),
+    ),
+  );
+
+program
   .command("safety")
-  .description("Sync safety from per-city CSV files")
+  .description("Sync safety from per-city CSV files (legacy)")
   .option("--dir <path>", "directory containing CSV files", null)
   .action((opts, cmd) =>
     withAdmin(() =>
@@ -97,6 +115,22 @@ program
   );
 
 program
+  .command("city-upsert-batch")
+  .description("Batch create/update cities from a JSON file")
+  .requiredOption(
+    "--file <path>",
+    "path to JSON file containing array of city objects",
+  )
+  .action((opts, cmd) =>
+    withAdmin(() =>
+      taskCityUpsertBatch({
+        file: opts.file,
+        dryRun: cmd.parent.opts().dryRun,
+      }),
+    ),
+  );
+
+program
   .command("city-upsert")
   .description("Create or update a single city doc (non-destructive)")
   .requiredOption("--slug <slug>", "city slug/doc id, e.g. san-luis-obispo-ca")
@@ -122,6 +156,54 @@ program
         description: opts.description,
         highlights: opts.highlights,
         dryRun: cmd.parent.opts().dryRun,
+      }),
+    ),
+  );
+
+program
+  .command("attractions")
+  .description("Sync things-to-do attractions from Foursquare Places API")
+  .option("--cities <slugs>", "comma-separated city ids")
+  .action((opts, cmd) =>
+    withAdmin(() =>
+      taskAttractions({
+        cities: parseCities(opts.cities),
+        dryRun: cmd.parent.opts().dryRun,
+        verbose: cmd.parent.opts().verbose,
+      }),
+    ),
+  );
+
+program
+  .command("summaries")
+  .description(
+    "Generate AI city snapshot summaries (city_summaries collection)",
+  )
+  .option("--cities <slugs>", "comma-separated city ids")
+  .option("--force", "regenerate even if a summary already exists", false)
+  .action((opts, cmd) =>
+    withAdmin(() =>
+      taskSummaries({
+        cities: parseCities(opts.cities),
+        force: !!opts.force,
+        dryRun: cmd.parent.opts().dryRun,
+        verbose: cmd.parent.opts().verbose,
+      }),
+    ),
+  );
+
+program
+  .command("air-quality")
+  .description(
+    "Sync air quality data (PM2.5 → AQI) from OpenAQ into city_metrics",
+  )
+  .option("--cities <slugs>", "comma-separated city ids")
+  .action((opts, cmd) =>
+    withAdmin(() =>
+      taskAirQuality({
+        cities: parseCities(opts.cities),
+        dryRun: cmd.parent.opts().dryRun,
+        verbose: cmd.parent.opts().verbose,
       }),
     ),
   );
@@ -160,14 +242,12 @@ program
 program
   .command("weekly-refresh")
   .description(
-    "Run the standard weekly pipeline: metrics -> safety -> stats -> livability",
+    "Run the standard weekly pipeline: metrics -> safety-api -> air-quality -> stats -> livability",
   )
-  .option("--dir <path>", "CSV dir (for safety)", null)
   .action((opts, cmd) =>
     withAdmin(() =>
       taskRun({
-        steps: ["metrics", "safety", "stats", "livability"],
-        dir: opts.dir ?? null,
+        steps: ["metrics", "safety-api", "air-quality", "stats", "livability"],
         all: true,
         dryRun: cmd.parent.opts().dryRun,
         verbose: cmd.parent.opts().verbose,

@@ -1,5 +1,6 @@
 const { db, admin } = require("../config/firebase");
 const { updatedTimestamp } = require("../utils/timestamps");
+const { invalidateCityListCache, invalidateCityDetailsCache } = require("./cityService");
 const {
   normalizeRatings,
   addRatings,
@@ -8,6 +9,7 @@ const {
   computeAverages,
   normalizeFlatCityMetrics,
   computeLivabilityV0,
+  computeLivabilityV1,
 } = require("../utils/cityStats");
 
 const { makeReviewId } = require("../lib/reviews");
@@ -36,10 +38,11 @@ async function upsertMyReviewForCity({
   const uid = String(userId).trim();
   const reviewId = makeReviewId(uid, cityId);
 
-  const cityRef = db.collection("cities").doc(cityId);
-  const reviewRef = db.collection("reviews").doc(reviewId);
-  const statsRef = db.collection("city_stats").doc(cityId);
+  const cityRef    = db.collection("cities").doc(cityId);
+  const reviewRef  = db.collection("reviews").doc(reviewId);
+  const statsRef   = db.collection("city_stats").doc(cityId);
   const metricsRef = db.collection("city_metrics").doc(cityId);
+  const normsRef   = db.collection("livability_config").doc("norms");
 
   const txResult = await db.runTransaction(async (tx) => {
     // 1. City must exist before accepting a review.
@@ -57,10 +60,11 @@ async function upsertMyReviewForCity({
     const prevData = reviewSnap.exists ? reviewSnap.data() || {} : {};
     const prevRatings = normalizeRatings(prevData.ratings);
 
-    // 3 & 4. Fetch aggregate state and metrics in parallel (still within the tx).
-    const [statsSnap, metricsSnap] = await Promise.all([
+    // 3–5. Fetch aggregate state, metrics, and distribution norms in parallel.
+    const [statsSnap, metricsSnap, normsSnap] = await Promise.all([
       tx.get(statsRef),
       tx.get(metricsRef),
+      tx.get(normsRef),
     ]);
 
     const prevStats = statsSnap.exists ? statsSnap.data() || {} : {};
@@ -83,7 +87,10 @@ async function upsertMyReviewForCity({
 
     const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
     const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
-    const livability = computeLivabilityV0({ averages, metrics });
+    const norms   = normsSnap.exists ? normsSnap.data() : null;
+    const livability = norms
+      ? computeLivabilityV1({ averages, metrics, norms })
+      : computeLivabilityV0({ averages, metrics });
     const now = admin.firestore.Timestamp.now();
 
     const reviewPatch = {
@@ -122,6 +129,9 @@ async function upsertMyReviewForCity({
     return { isNew, reviewData };
   });
 
+  invalidateCityListCache();
+  invalidateCityDetailsCache(cityId);
+
   return {
     created: txResult.isNew,
     reviewId,
@@ -142,10 +152,11 @@ async function getMyReviewForCity({ cityId, userId }) {
 async function deleteMyReviewForCity({ cityId, userId }) {
   const reviewId = makeReviewId(String(userId).trim(), cityId);
 
-  const cityRef = db.collection("cities").doc(cityId);
-  const reviewRef = db.collection("reviews").doc(reviewId);
-  const statsRef = db.collection("city_stats").doc(cityId);
+  const cityRef    = db.collection("cities").doc(cityId);
+  const reviewRef  = db.collection("reviews").doc(reviewId);
+  const statsRef   = db.collection("city_stats").doc(cityId);
   const metricsRef = db.collection("city_metrics").doc(cityId);
+  const normsRef   = db.collection("livability_config").doc("norms");
 
   await db.runTransaction(async (tx) => {
     const citySnap = await tx.get(cityRef);
@@ -167,9 +178,10 @@ async function deleteMyReviewForCity({ cityId, userId }) {
     const existing = reviewSnap.data() || {};
     const oldRatings = normalizeRatings(existing.ratings || {});
 
-    const [statsSnap, metricsSnap] = await Promise.all([
+    const [statsSnap, metricsSnap, normsSnap] = await Promise.all([
       tx.get(statsRef),
       tx.get(metricsRef),
+      tx.get(normsRef),
     ]);
 
     const prevStats = statsSnap.exists ? statsSnap.data() || {} : {};
@@ -185,7 +197,10 @@ async function deleteMyReviewForCity({ cityId, userId }) {
 
     const metricsDoc = metricsSnap.exists ? metricsSnap.data() || {} : {};
     const metrics = normalizeFlatCityMetrics(cityId, metricsDoc);
-    const livability = computeLivabilityV0({ averages, metrics });
+    const norms   = normsSnap.exists ? normsSnap.data() : null;
+    const livability = norms
+      ? computeLivabilityV1({ averages, metrics, norms })
+      : computeLivabilityV0({ averages, metrics });
 
     tx.delete(reviewRef);
 
@@ -201,6 +216,9 @@ async function deleteMyReviewForCity({ cityId, userId }) {
       { merge: true },
     );
   });
+
+  invalidateCityListCache();
+  invalidateCityDetailsCache(cityId);
 
   return { deleted: true };
 }

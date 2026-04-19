@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { OAuth2Client } = require("google-auth-library");
-const { GOOGLE_CLIENT_ID, NODE_ENV } = require("../config/env");
+const { GOOGLE_CLIENT_ID, SESSION_JWT_SECRET, NODE_ENV } = require("../config/env");
 
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
@@ -27,12 +27,7 @@ async function login(req, res, next) {
     }
     if (!GOOGLE_CLIENT_ID) {
       return res.status(500).json({
-        error: { code: "SERVER_MISCONFIG", message: "Missing GOOGLE_CLIENT_ID" },
-      });
-    }
-    if (!process.env.SESSION_JWT_SECRET) {
-      return res.status(500).json({
-        error: { code: "SERVER_MISCONFIG", message: "Missing SESSION_JWT_SECRET" },
+        error: { code: "SERVER_MISCONFIG", message: "Server configuration error" },
       });
     }
 
@@ -48,8 +43,9 @@ async function login(req, res, next) {
         email: googlePayload.email || null,
         name: googlePayload.name || null,
         picture: googlePayload.picture || null,
+        emailVerified: googlePayload.email_verified ?? false,
       },
-      process.env.SESSION_JWT_SECRET,
+      SESSION_JWT_SECRET,
       { expiresIn: "7d" },
     );
 
@@ -62,6 +58,7 @@ async function login(req, res, next) {
         email: googlePayload.email || null,
         name: googlePayload.name || null,
         picture: googlePayload.picture || null,
+        emailVerified: googlePayload.email_verified ?? false,
       },
     });
   } catch (err) {

@@ -28,6 +28,8 @@ const {
   assertSumsNonNegative,
   normalizeFlatCityMetrics,
   computeLivabilityV0,
+  computeLivabilityV1,
+  computeLivabilityNorms,
 } = require("../src/utils/cityStats");
 
 const ALL_KEYS = ["safety", "affordability", "walkability", "cleanliness", "overall"];
@@ -222,4 +224,114 @@ test("computeLivabilityV0: rent above ceiling clamped to 0", () => {
     metrics: { medianRent: 5000 }, // safetyScore absent
   });
   assert.equal(result.score, 38);
+});
+
+// ─── computeLivabilityV1 ─────────────────────────────────────────────────────
+
+// Norms used across v1 tests: review 4–8, safety 5–9, rent $1,000–$3,000
+const TEST_NORMS = {
+  reviewOverall: { min: 4, max: 8 },
+  safetyScore:   { min: 5, max: 9 },
+  medianRent:    { min: 1000, max: 3000 },
+};
+
+test("computeLivabilityV1: top-of-range inputs → 100", () => {
+  // overallAvg=8 → reviewScore=100, safety=9 → safetyScore=100, rent=$1000 → rentScore=100
+  const result = computeLivabilityV1({
+    averages: { overall: 8 },
+    metrics: { safetyScore: 9, medianRent: 1000 },
+    norms: TEST_NORMS,
+  });
+  assert.equal(result.version, "v1");
+  assert.equal(result.score, 100);
+});
+
+test("computeLivabilityV1: bottom-of-range inputs → 0", () => {
+  // overallAvg=4 → 0, safety=5 → 0, rent=$3000 → 0
+  const result = computeLivabilityV1({
+    averages: { overall: 4 },
+    metrics: { safetyScore: 5, medianRent: 3000 },
+    norms: TEST_NORMS,
+  });
+  assert.equal(result.score, 0);
+});
+
+test("computeLivabilityV1: midpoint inputs → 50", () => {
+  // overallAvg=6 → 50, safety=7 → 50, rent=$2000 → 50
+  // all signals = 50, blend = 50
+  const result = computeLivabilityV1({
+    averages: { overall: 6 },
+    metrics: { safetyScore: 7, medianRent: 2000 },
+    norms: TEST_NORMS,
+  });
+  assert.equal(result.score, 50);
+});
+
+test("computeLivabilityV1: renormalizes when safety norm is absent", () => {
+  // safety norm missing → signal dropped. review(0.5) + rent(0.15) → totalWeight=0.65
+  // reviewScore = (6-4)/(8-4)*100 = 50, rentScore = (3000-2000)/(3000-1000)*100 = 50
+  // score = round(50*(0.5/0.65) + 50*(0.15/0.65)) = round(50) = 50
+  const result = computeLivabilityV1({
+    averages: { overall: 6 },
+    metrics: { safetyScore: 7, medianRent: 2000 },
+    norms: { reviewOverall: { min: 4, max: 8 }, medianRent: { min: 1000, max: 3000 } },
+  });
+  assert.equal(result.score, 50);
+});
+
+test("computeLivabilityV1: returns null when no norms are present for any signal", () => {
+  const result = computeLivabilityV1({
+    averages: { overall: 6 },
+    metrics: { safetyScore: 7, medianRent: 2000 },
+    norms: {},
+  });
+  assert.equal(result.version, "v1");
+  assert.equal(result.score, null);
+});
+
+test("computeLivabilityV1: returns null when averages and metrics are empty", () => {
+  const result = computeLivabilityV1({ averages: {}, metrics: {}, norms: TEST_NORMS });
+  assert.equal(result.score, null);
+});
+
+// ─── computeLivabilityNorms ───────────────────────────────────────────────────
+
+test("computeLivabilityNorms: extracts min/max from city data", () => {
+  const cityDataList = [
+    { averages: { overall: 4 }, metrics: { safetyScore: 5, medianRent: 1000 } },
+    { averages: { overall: 6 }, metrics: { safetyScore: 7, medianRent: 2000 } },
+    { averages: { overall: 8 }, metrics: { safetyScore: 9, medianRent: 3000 } },
+  ];
+  const norms = computeLivabilityNorms(cityDataList);
+  assert.equal(norms.reviewOverall.min, 4);
+  assert.equal(norms.reviewOverall.max, 8);
+  assert.equal(norms.reviewOverall.count, 3);
+  assert.equal(norms.safetyScore.min, 5);
+  assert.equal(norms.safetyScore.max, 9);
+  assert.equal(norms.medianRent.min, 1000);
+  assert.equal(norms.medianRent.max, 3000);
+});
+
+test("computeLivabilityNorms: returns null for signals with fewer than 2 data points", () => {
+  // Only 1 city with a review → degenerate range, can't rank
+  const cityDataList = [
+    { averages: { overall: 6 }, metrics: { safetyScore: 7, medianRent: null } },
+    { averages: {},              metrics: { safetyScore: 8, medianRent: null } },
+  ];
+  const norms = computeLivabilityNorms(cityDataList);
+  assert.equal(norms.reviewOverall, null);     // only 1 review value → null
+  assert.equal(norms.medianRent, null);        // no rent values → null
+  assert.notEqual(norms.safetyScore, null);    // 2 safety values → valid
+  assert.equal(norms.safetyScore.count, 2);
+});
+
+test("computeLivabilityNorms: skips cities with missing/null metrics", () => {
+  const cityDataList = [
+    { averages: { overall: 5 }, metrics: { safetyScore: null, medianRent: 1500 } },
+    { averages: { overall: 7 }, metrics: { safetyScore: 8,    medianRent: 2500 } },
+  ];
+  const norms = computeLivabilityNorms(cityDataList);
+  assert.equal(norms.reviewOverall.count, 2);
+  assert.equal(norms.safetyScore, null);       // only 1 valid safety value → null
+  assert.equal(norms.medianRent.count, 2);
 });

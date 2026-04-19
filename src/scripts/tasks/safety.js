@@ -2,19 +2,10 @@ const fs = require("fs");
 const path = require("path");
 
 const { db } = require("../../config/firebase");
-const { clamp0to10 } = require("../../lib/numbers");
 const { upsertCityMetrics } = require("../../utils/cityMetrics");
 const { recomputeCityLivability } = require("../../utils/cityStats");
+const { YEARS_TO_AVG, WEIGHT_VIOLENT, WEIGHT_PROPERTY, computeSafetyScore } = require("../lib/safetyCalibration");
 
-// Config
-const YEARS_TO_AVG = 3;
-const WEIGHT_VIOLENT = 3;
-const WEIGHT_PROPERTY = 1;
-// RATE_AT_ZERO: the weighted-average crime index (per 100k) at which safetyScore = 0.
-// Calibrated for the weighted-average formula below (not weighted sum).
-// US national violent ~380/100k, property ~2000/100k → weighted avg ≈ 785/100k → score ~6.9.
-// High-crime CA city (e.g. violent 750, property 2500 per 100k) → weighted avg ≈ 1188 → score ~5.3.
-const RATE_AT_ZERO = 2500;
 const SAFETY_PIPELINE_VERSION = "syncSafetyFromCsv:v2";
 
 // Path resolution
@@ -43,18 +34,6 @@ function parseCount(cell) {
   return Number.isFinite(n) ? n : null;
 }
 
-/**
- * Convert crimeIndexPer100k -> safety score (0–10).
- * RATE_AT_ZERO is the "very unsafe" threshold (score ~ 0).
- */
-function computeSafetyScoreFromIndex(crimeIndexPer100k) {
-  if (!Number.isFinite(crimeIndexPer100k)) return null;
-
-  // 0..10 where 10 is safest
-  const raw10 = 10 - (crimeIndexPer100k / RATE_AT_ZERO) * 10;
-
-  return Math.round(clamp0to10(raw10) * 10) / 10;
-}
 
 /**
  * Parses crime CSV text into a structured object.
@@ -108,13 +87,22 @@ function avgLastNYears(years, cells, n) {
   return { avg, used: values.length };
 }
 
-// Firestore helpers
-/** Reads the stored population from `city_metrics`; returns `null` if missing or zero. */
-async function getPopulation(cityId) {
-  const snap = await db.collection("city_metrics").doc(cityId).get();
-  if (!snap.exists) return null;
-  const pop = Number(snap.data()?.population);
-  return Number.isFinite(pop) && pop > 0 ? pop : null;
+/**
+ * Batch-reads population values for all given cityIds from `city_metrics`.
+ * Returns a Map<cityId, number|null> for O(1) lookup inside the CSV loop.
+ */
+async function batchReadPopulations(cityIds) {
+  if (cityIds.length === 0) return new Map();
+  const refs = cityIds.map((id) => db.collection("city_metrics").doc(id));
+  const snaps = await db.getAll(...refs);
+  const result = new Map();
+  snaps.forEach((snap, idx) => {
+    const cityId = cityIds[idx];
+    if (!snap.exists) { result.set(cityId, null); return; }
+    const pop = Number(snap.data()?.population);
+    result.set(cityId, Number.isFinite(pop) && pop > 0 ? pop : null);
+  });
+  return result;
 }
 
 /**
@@ -139,6 +127,10 @@ async function taskSafety({ dir, dryRun = false, verbose = false } = {}) {
 
   const syncedAt = new Date().toISOString();
   const touchedCityIds = [];
+
+  // Derive city IDs from CSV filenames and batch-read populations in one RPC.
+  const cityIds = files.map((f) => f.replace(/\.csv$/i, "").trim().toLowerCase());
+  const populationMap = await batchReadPopulations(cityIds);
 
   for (const file of files) {
     const cityId = file
@@ -173,7 +165,7 @@ async function taskSafety({ dir, dryRun = false, verbose = false } = {}) {
       continue;
     }
 
-    const population = await getPopulation(cityId);
+    const population = populationMap.get(cityId) ?? null;
     if (!population) {
       console.log(
         `[skip] ${cityId}: missing population in city_metrics/${cityId}`,
@@ -197,7 +189,7 @@ async function taskSafety({ dir, dryRun = false, verbose = false } = {}) {
       (violent.avg * WEIGHT_VIOLENT + property.avg * WEIGHT_PROPERTY) /
       (WEIGHT_VIOLENT + WEIGHT_PROPERTY);
     const crimeIndexPer100k = (weightedAvg / population) * 100000;
-    const safetyScore = computeSafetyScoreFromIndex(crimeIndexPer100k);
+    const safetyScore = computeSafetyScore(crimeIndexPer100k);
 
     const patch = {
       safetyScore,
@@ -241,4 +233,4 @@ async function taskSafety({ dir, dryRun = false, verbose = false } = {}) {
   return { touchedCityIds };
 }
 
-module.exports = { taskSafety, computeSafetyScoreFromIndex, readCrimeRowsFromCsv, avgLastNYears };
+module.exports = { taskSafety, computeSafetyScore, readCrimeRowsFromCsv, avgLastNYears };

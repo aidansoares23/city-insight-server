@@ -30,12 +30,12 @@ function errorHandler(err, req, res, next) {
       ? "Internal server error"
       : "Request failed";
 
+  const isProd = process.env.NODE_ENV === "production";
   console.error("ERROR:", {
     status,
     code,
     message,
-    details: err?.details,
-    stack: err?.stack,
+    ...(isProd ? {} : { details: err?.details, stack: err?.stack }),
   });
 
   const payload = { error: { code, message } };

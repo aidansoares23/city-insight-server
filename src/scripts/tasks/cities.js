@@ -103,4 +103,50 @@ async function taskCityUpsert({
   return { ok: true, cityId, created: !existing.exists, dryRun: false };
 }
 
-module.exports = { taskCityUpsert };
+/**
+ * Reads a JSON file containing an array of city objects and upserts each one.
+ * Each object supports the same fields as `taskCityUpsert`: slug, name, state,
+ * lat, lng, tagline, description, highlights (comma-separated string).
+ * @param {{ file: string, dryRun?: boolean }} options
+ * @returns {Promise<{ ok: number, fail: number }>}
+ */
+async function taskCityUpsertBatch({ file, dryRun = false } = {}) {
+  const fs = require("fs");
+  const path = require("path");
+
+  const filePath = path.isAbsolute(file) ? file : path.join(process.cwd(), file);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Batch file not found: ${filePath}`);
+  }
+
+  let cities;
+  try {
+    cities = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (err) {
+    throw new Error(`Failed to parse batch file: ${err.message}`);
+  }
+
+  if (!Array.isArray(cities)) {
+    throw new Error("Batch file must contain a JSON array of city objects.");
+  }
+
+  console.log(`=== city-upsert-batch: ${cities.length} cities (dry-run=${dryRun}) ===`);
+
+  let ok = 0;
+  let fail = 0;
+
+  for (const city of cities) {
+    try {
+      await taskCityUpsert({ ...city, dryRun });
+      ok++;
+    } catch (err) {
+      console.error(`[city-upsert-batch] failed (${city?.slug ?? "unknown"}):`, err.message);
+      fail++;
+    }
+  }
+
+  console.log(`✅ batch done. ok=${ok} fail=${fail}`);
+  return { ok, fail };
+}
+
+module.exports = { taskCityUpsert, taskCityUpsertBatch };

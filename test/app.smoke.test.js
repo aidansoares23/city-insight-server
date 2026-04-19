@@ -272,19 +272,27 @@ test("DELETE /api/me requires auth — no header returns 401", async () => {
   assert.equal(response.status, 401);
 });
 
-test("POST /api/cities/:slug/reviews requires X-Requested-With in non-bypass mode", async () => {
-  // In dev bypass mode (DEV_AUTH_BYPASS=true), the CSRF check is skipped for x-dev-user requests.
-  // Verify that a POST without the header AND without dev auth is blocked at the CSRF layer.
+test("POST /api/cities/:slug/reviews with no auth returns 401", async () => {
+  // No x-dev-user and no X-Requested-With — unauthenticated request should be rejected with 401.
   const { response } = await requestJson(
     "/api/cities/san-francisco-ca/reviews",
     {
       method: "POST",
-      // No x-dev-user and no X-Requested-With — hits CSRF guard on the auth middleware
       body: {
         ratings: { safety: 7, affordability: 4, walkability: 5, cleanliness: 6, overall: 6 },
       },
     },
   );
-  // Without any auth header the request is rejected before reaching the route handler
-  assert.ok(response.status === 401 || response.status === 403);
+  assert.equal(response.status, 401);
+});
+
+test("POST /api/auth/logout without X-Requested-With returns 403", async () => {
+  // The auth routes enforce CSRF-lite independent of DEV_AUTH_BYPASS.
+  // A state-changing request missing X-Requested-With must be blocked with 403.
+  const { response, payload } = await requestJson("/api/auth/logout", {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(response.status, 403);
+  assert.equal(payload.error.code, "CSRF");
 });

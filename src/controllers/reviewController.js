@@ -10,9 +10,18 @@ const {
 } = require("../lib/reviews");
 
 const reviewService = require("../services/reviewService");
+const reactionService = require("../services/reactionService");
+
+const SLUG_RE = /^[a-z0-9-]{3,50}$/;
+
+/** Normalizes and validates a city slug param. Returns the slug string or null if invalid. */
+function parseCitySlug(raw) {
+  const slug = String(raw).trim().toLowerCase();
+  return SLUG_RE.test(slug) ? slug : null;
+}
 
 /** Shapes a Firestore review document into the public API response format with ISO timestamps. */
-function toReview(docId, data) {
+function toReview(docId, data, reactions = null) {
   return withIsoTimestamps({
     id: docId,
     cityId: data.cityId,
@@ -21,6 +30,7 @@ function toReview(docId, data) {
     isEdited: data.isEdited ?? false,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
+    reactions: reactions ?? { helpful: 0, agree: 0, disagree: 0 },
   });
 }
 
@@ -32,7 +42,8 @@ function toMyReview(docId, data) {
 /** Validates and upserts the authenticated user's review for a city; returns 201 on create, 200 on update. */
 async function createOrUpdateReviewForCity(req, res, next) {
   try {
-    const cityId = String(req.params.slug).trim().toLowerCase();
+    const cityId = parseCitySlug(req.params.slug);
+    if (!cityId) return res.status(400).json({ error: { code: "INVALID_SLUG", message: "Invalid city identifier." } });
     const userId = req.user.sub;
 
     const { ok, errors } = validateReviewBody(req.body);
@@ -69,7 +80,8 @@ async function createOrUpdateReviewForCity(req, res, next) {
 /** Returns a paginated list of reviews for a city; accepts `pageSize` (1–50) and cursor query params. */
 async function listReviewsForCity(req, res, next) {
   try {
-    const cityId = String(req.params.slug).trim().toLowerCase();
+    const cityId = parseCitySlug(req.params.slug);
+    if (!cityId) return res.status(400).json({ error: { code: "INVALID_SLUG", message: "Invalid city identifier." } });
 
     const rawPageSize = parseInt(req.query.pageSize || "10", 10);
     const pageSize = Math.max(
@@ -85,7 +97,25 @@ async function listReviewsForCity(req, res, next) {
       cursor,
     });
 
-    const reviews = docs.map((doc) => toReview(doc.id, doc.data()));
+    const reviewIds = docs.map((doc) => doc.id);
+
+    // Fetch reaction counts for all reviews in a single query (batched by reviewId)
+    const [countsMap, myReactionsMap] = await Promise.all([
+      reactionService.getReactionCountsForReviews(reviewIds),
+      req.user
+        ? reactionService.getMyReactionsForReviews({
+            userId: req.user.sub,
+            reviewIds,
+          })
+        : Promise.resolve(new Map()),
+    ]);
+
+    const EMPTY_COUNTS = { helpful: 0, agree: 0, disagree: 0 };
+    const reviews = docs.map((doc) => ({
+      ...toReview(doc.id, doc.data(), countsMap.get(doc.id) ?? EMPTY_COUNTS),
+      myReaction: myReactionsMap.get(doc.id) ?? null,
+    }));
+
     const nextCursor = docs.length
       ? buildNextCursorFromDoc(docs[docs.length - 1])
       : null;
@@ -99,7 +129,8 @@ async function listReviewsForCity(req, res, next) {
 /** Fetches a single review by `reviewId` scoped to a city; 404s if not found or if the review belongs to a different city. */
 async function getReviewByIdForCity(req, res, next) {
   try {
-    const cityId = String(req.params.slug).trim().toLowerCase();
+    const cityId = parseCitySlug(req.params.slug);
+    if (!cityId) return res.status(400).json({ error: { code: "INVALID_SLUG", message: "Invalid city identifier." } });
     const reviewId = String(req.params.reviewId).trim();
 
     const reviewDoc = await reviewService.getReviewByIdForCity({
@@ -121,7 +152,8 @@ async function getReviewByIdForCity(req, res, next) {
 /** Returns the authenticated user's review for a city, or `{ review: null }` if none exists. */
 async function getMyReviewForCity(req, res, next) {
   try {
-    const cityId = String(req.params.slug).trim().toLowerCase();
+    const cityId = parseCitySlug(req.params.slug);
+    if (!cityId) return res.status(400).json({ error: { code: "INVALID_SLUG", message: "Invalid city identifier." } });
     const userId = req.user.sub;
 
     const { reviewId, review } = await reviewService.getMyReviewForCity({
@@ -139,7 +171,8 @@ async function getMyReviewForCity(req, res, next) {
 /** Deletes the authenticated user's review for a city and returns `{ ok: true, deleted: true }`. */
 async function deleteMyReviewForCity(req, res, next) {
   try {
-    const cityId = String(req.params.slug).trim().toLowerCase();
+    const cityId = parseCitySlug(req.params.slug);
+    if (!cityId) return res.status(400).json({ error: { code: "INVALID_SLUG", message: "Invalid city identifier." } });
     const userId = req.user.sub;
 
     await reviewService.deleteMyReviewForCity({ cityId, userId });
