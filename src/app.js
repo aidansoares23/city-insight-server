@@ -41,6 +41,7 @@ app.use(cookieParser());
 app.use(
   cors({
     origin(origin, cb) {
+      if (!origin && NODE_ENV === "development") return cb(null, true);
       if (!origin) return cb(new Error("CORS_NOT_ALLOWED"));
       if (CLIENT_ORIGINS.includes(origin)) return cb(null, true);
       return cb(new Error("CORS_NOT_ALLOWED"));
